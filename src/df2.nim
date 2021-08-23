@@ -6,58 +6,92 @@ import sequtils
 import tables
 import times
 import stats
+import algorithm
 
 type Cell = string
+type Row = Table[string, Cell]
 type Series = seq[Cell]
 type DataFrame = Table[string, Series]
 
 const defaultTimeFormat = "yyyy/MM/dd HH:mm:ss"
 
 ###############################################################
-proc `[]=`[T](df: var DataFrame, colName: string, right: openArray[T]) {. discardable .} =
-    var val = collect(newSeq):
-        for c in right:
-            c.parseString()
-    df.add(colName, val)
+#parse... : cellに対しての型変換
+#to...    : seriesに対しての型変換
+proc initDataFrame(): DataFrame =
+    result = initTable[string, Series]()
+proc initSeries(): Series =
+    result = @[]
+proc initRow(): Row =
+    result = initTable[string, Cell]()
 
 iterator columns(df: DataFrame): string =
     for key in df.keys:
         yield key
-
+iterator rows(df: DataFrame): Row =
+    let maxRowNumber = min(
+        collect(newSeq) do:
+            for colName in df.columns:
+                df[colName].len
+    )
+    for i in 0..<maxRowNumber:
+        var row = initRow()
+        for colName in df.columns:
+            row[colName] = df[colName][i]
+        yield row
 proc getColumnName(df: DataFrame): seq[string] =
     for column in df.columns:
         result.add(column)
 proc getSeries(df: DataFrame): seq[Series] =
     for value in df.values:
         result.add(value)
-
-###############################################################
-#parse... : cellに対しての型変換
-#to...    : seriesに対しての型変換
+proc getRows(df: DataFrame): seq[Row] =
+    for row in df.rows:
+        result.add(row)
+        
 proc `$`(x: DateTime): string =
     x.format(defaultTimeFormat)
 proc parseString[T](x: T): Cell =
     $x
 proc parseTime(c: Cell, format=defaultTimeFormat): DateTime =
     c.parse(format)
+proc genParseTime(format=defaultTimeFormat): Cell -> DateTime =
+    result =
+        proc(c:Cell): DateTime =
+            c.parseTime(format)
 
-proc toSome[T](s: Series, parser: Cell -> T): seq[T] =
+proc `[]=`[T](df: var DataFrame, colName: string, right: openArray[T]) {. discardable .} =
+    var val = collect(newSeq):
+        for c in right:
+            c.parseString()
+    df.add(colName, val)
+
+proc `[]`(df: DataFrame, boolean: seq[bool]): DataFrame =
+    result = initDataFrame()
+    for colName in df.columns:
+        result[colName] = initSeries()
+    for colName in df.columns:
+        for i, b in boolean.pairs():
+            if b:
+                result[colName].add(df[colName][i])
+
+proc iloc(df: DataFrame, index: int): Row =
+    result = initRow()
+    for colName in df.columns:
+        result[colName] = df[colName][index]
+
+###############################################################
+
+proc to[T](s: Series, parser: Cell -> T): seq[T] =
     result = collect(newSeq):
         for c in s:
             parser(c)
 proc toInt(s: Series): seq[int] =
-    toSome(s, parseInt)
+    to(s, parseInt)
 proc toFloat(s: Series): seq[float] =
-    toSome(s, parseFloat)
+    to(s, parseFloat)
 proc toTime(s: Series, format=defaultTimeFormat): seq[DateTime] =
-    result = collect(newSeq):
-        for c in s:
-            parseTime(c, format)
-
-proc initDataFrame(): DataFrame =
-    result = initTable[string, Series]()
-proc initSeries(): Series =
-    result = @[]
+    to(s, genParseTime(format))
 
 proc `+`(a: Cell, b: float): float =
     parseFloat(a) + b
@@ -75,6 +109,31 @@ proc `*`(a: float, b: Cell): float =
     a * parseFloat(b)
 proc `/`(a: float, b: Cell): float =
     a / parseFloat(b)
+
+proc `==`(a: Cell, b: float): bool =
+    result = a.parseFloat() == b
+proc `!=`(a: Cell, b: float): bool =
+    result = a.parseFloat() != b
+proc `>`(a: Cell, b: float): bool =
+    result = a.parseFloat() > b
+proc `<`(a: Cell, b: float): bool =
+    result = a.parseFloat() < b
+proc `>=`(a: Cell, b: float): bool =
+    result = a.parseFloat() >= b
+proc `<=`(a: Cell, b: float): bool =
+    result = a.parseFloat() <= b
+proc `==`(a: float, b: Cell): bool =
+    result = a == b.parseFloat()
+proc `!=`(a: float, b: Cell): bool =
+    result = a != b.parseFloat()
+proc `>`(a: float, b: Cell): bool =
+    result = a > b.parseFloat()
+proc `<`(a: float, b: Cell): bool =
+    result = a < b.parseFloat()
+proc `>=`(a: float, b: Cell): bool =
+    result = a >= b.parseFloat()
+proc `<=`(a: float, b: Cell): bool =
+    result = a <= b.parseFloat()
     
 ###############################################################
 proc toDataFrame(text: string, sep=",", headers: openArray[string], headerRows= -1): DataFrame =
@@ -136,16 +195,47 @@ proc renameColumns(df: DataFrame, renameMap: openArray[(string,string)]): DataFr
             result[renamePair[1]] = result[renamePair[0]]
             result.del(renamePair[0])
 
-proc someMap[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
+proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
     for c in s:
         result.add(fn(fromCell(c)).parseString())
 proc intMap[T](s: Series, fn: int -> T): Series =
-    someMap(s, parseInt)
+    map(s, fn, parseInt)
 proc floatMap[T](s: Series, fn: float -> T): Series =
-    someMap(s, parseFloat)
-proc timeMap[T](s: Series, fn: Time -> T, format=defaultTimeFormat): Series =
-    for c in s:
-        result.add(fn(parseTime(c, format)).parseString())
+    map(s, fn, parseFloat)
+proc timeMap[T](s: Series, fn: DateTime -> T, format=defaultTimeFormat): Series =
+    map(s, fn, genParseTime(format))
+
+proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
+    var boolean: seq[bool] = @[]
+    for row in df.rows:
+        boolean.add(fltr(row))
+    result = df[boolean]
+
+proc sort[T](df: DataFrame, colName: string, fromCell: Cell -> T, ascending=true): DataFrame =
+    result = initDataFrame()
+    for colName in df.columns:
+        result[colName] = initSeries()
+    var sortSource = collect(newSeq):
+        for rowNumber, row in df.getRows().pairs():
+            (rowNumber, fromCell(row[colName]))
+    let coef =
+        if ascending: 1
+        else: -1
+    let cmp = proc(x: (int,T), y: (int,T)): int =
+        if x[1] < y[1]: -1*coef
+        elif x[1] == y[1]: 0
+        else: 1*coef
+    sortSource.sort(cmp)
+    for sorted in sortSource:
+        for colName in df.columns:
+            result[colName].add(df[colName][sorted[0]])
+proc intSort(df: DataFrame, colName: string, ascending=true): DataFrame =
+    sort(df, colName, parseInt, ascending)
+proc floatSort(df: DataFrame, colName: string, ascending=true): DataFrame =
+    sort(df, colName, parseFloat, ascending)
+proc timeSort(df: DataFrame, colName: string, format=defaultTimeFormat, ascending=true): DataFrame =
+    sort(df, colName, genParseTime(format), ascending)
+
 
 ###############################################################
 proc mean(df: DataFrame): DataFrame =
@@ -162,7 +252,7 @@ proc max(df: DataFrame): DataFrame =
     discard
 proc min(df: DataFrame): DataFrame =
     discard
-proc var(df: DataFrame): DataFrame =
+proc v(df: DataFrame): DataFrame =
     discard
 
 ###############################################################
@@ -174,6 +264,7 @@ proc toBe() =
     if not openOk:
         quit(fmt"{filename} open failed.")
     let csv = fp.readAll()
+    echo "--------------------------------"
     #
     var df = toDataFrame(
         text=csv,
@@ -181,6 +272,7 @@ proc toBe() =
         headerRows=1,
     )
     echo df
+    echo "--------------------------------"
     #
     var df1 = toDataFrame(
         [
@@ -191,8 +283,29 @@ proc toBe() =
         columns=["col1","col2","col3","col10"],
     )
     echo df1
+    echo "--------------------------------"
     #
     echo df.mean()
+    echo "--------------------------------"
+    #
+    echo df["sales"].intMap(c => c*2)
+    echo df["time"].timeMap(c => c+initDuration(hours=1))
+    var triple = proc(c: int): int =
+        c * 3
+    echo df["sales"].map(triple, parseInt)
+    echo "--------------------------------"
+    #
+    echo df.filter(row => row["sales"] >= 1000)
+    echo df.filter(row => row["sales"] > 100 and 1000 > row["sales"])
+    echo "--------------------------------"
+    #
+    echo df.iloc(0)
+    echo "--------------------------------"
+    #
+    echo df.sort("sales", parseInt, ascending=true)
+    echo df.sort("sales", parseInt, ascending=false)
+    echo df.timeSort("time", ascending=false)
+    echo "--------------------------------"
     #[
     #
     
