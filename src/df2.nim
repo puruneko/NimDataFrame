@@ -11,7 +11,10 @@ import algorithm
 type Cell = string
 type Row = Table[string, Cell]
 type Series = seq[Cell]
-type DataFrame = Table[string, Series]
+type DataFrameData = Table[string, Series]
+type DataFrame = object
+    data: DataFrameData
+    indexCol: string
 
 const defaultTimeFormat = "yyyy/MM/dd HH:mm:ss"
 
@@ -19,31 +22,35 @@ const defaultTimeFormat = "yyyy/MM/dd HH:mm:ss"
 #parse... : cellに対しての型変換
 #to...    : seriesに対しての型変換
 proc initDataFrame(): DataFrame =
-    result = initTable[string, Series]()
+    result.data = initTable[string, Series]()
+    result.indexCol = ""
 proc initSeries(): Series =
     result = @[]
 proc initRow(): Row =
     result = initTable[string, Cell]()
 
+proc `[]`(df: DataFrame, colName: string): Series =
+    df.data[colName]
+
 iterator columns(df: DataFrame): string =
-    for key in df.keys:
+    for key in df.data.keys:
         yield key
 iterator rows(df: DataFrame): Row =
     let maxRowNumber = min(
         collect(newSeq) do:
             for colName in df.columns:
-                df[colName].len
+                df.data[colName].len
     )
     for i in 0..<maxRowNumber:
         var row = initRow()
         for colName in df.columns:
-            row[colName] = df[colName][i]
+            row[colName] = df.data[colName][i]
         yield row
 proc getColumnName(df: DataFrame): seq[string] =
     for column in df.columns:
         result.add(column)
 proc getSeries(df: DataFrame): seq[Series] =
-    for value in df.values:
+    for value in df.data.values:
         result.add(value)
 proc getRows(df: DataFrame): seq[Row] =
     for row in df.rows:
@@ -64,7 +71,7 @@ proc `[]=`[T](df: var DataFrame, colName: string, right: openArray[T]) {. discar
     var val = collect(newSeq):
         for c in right:
             c.parseString()
-    df.add(colName, val)
+    df.data.add(colName, val)
 
 proc `[]`(df: DataFrame, boolean: seq[bool]): DataFrame =
     result = initDataFrame()
@@ -73,12 +80,12 @@ proc `[]`(df: DataFrame, boolean: seq[bool]): DataFrame =
     for colName in df.columns:
         for i, b in boolean.pairs():
             if b:
-                result[colName].add(df[colName][i])
+                result.data[colName].add(df.data[colName][i])
 
 proc iloc(df: DataFrame, index: int): Row =
     result = initRow()
     for colName in df.columns:
-        result[colName] = df[colName][index]
+        result[colName] = df.data[colName][index]
 
 ###############################################################
 
@@ -136,7 +143,13 @@ proc `<=`(a: float, b: Cell): bool =
     result = a <= b.parseFloat()
     
 ###############################################################
-proc toDataFrame(text: string, sep=",", headers: openArray[string], headerRows= -1): DataFrame =
+proc toDataFrame(
+    text: string,
+    sep=",",
+    headers: openArray[string],
+    headerRows= -1
+    indexCol=""
+): DataFrame =
     result = initDataFrame()
     for colName in headers:
         result[colName] = initSeries()
@@ -144,7 +157,7 @@ proc toDataFrame(text: string, sep=",", headers: openArray[string], headerRows= 
         if rowNumber < headerRows:
             continue
         for (cell, colName) in zip(line.split(sep), headers):
-            result[colName].add(cell.strip())
+            result.data[colName].add(cell.strip())
 
 proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = []): DataFrame =
     result = initDataFrame()
@@ -159,7 +172,7 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = []): D
                 result[colName] = initSeries()
             for row in rows:
                 for colNumber, colName in columns.pairs():
-                    result[colName].add(
+                    result.data[colName].add(
                         if colNumber < row.len:
                             row[colNumber].parseString()
                         else:
@@ -175,7 +188,7 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = []): D
             result[colName] = initSeries()
         for row in rows:
             for colNumber, colName in colNames.pairs():
-                result[colName].add(
+                result.data[colName].add(
                     if colNumber < row.len:
                         row[colNumber].parseString()
                     else:
@@ -187,13 +200,13 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = []): D
 proc dropColumns(df:DataFrame, colNames: openArray[string]): DataFrame =
     result = df
     for colName in colNames:
-        result.del(colName)
+        result.data.del(colName)
 proc renameColumns(df: DataFrame, renameMap: openArray[(string,string)]): DataFrame =
     result = df
     for renamePair in renameMap:
-        if result.contains(renamePair[0]):
-            result[renamePair[1]] = result[renamePair[0]]
-            result.del(renamePair[0])
+        if result.data.contains(renamePair[0]):
+            result.data[renamePair[1]] = result.data[renamePair[0]]
+            result.data.del(renamePair[0])
 
 proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
     for c in s:
@@ -228,7 +241,7 @@ proc sort[T](df: DataFrame, colName: string, fromCell: Cell -> T, ascending=true
     sortSource.sort(cmp)
     for sorted in sortSource:
         for colName in df.columns:
-            result[colName].add(df[colName][sorted[0]])
+            result.data[colName].add(df.data[colName][sorted[0]])
 proc intSort(df: DataFrame, colName: string, ascending=true): DataFrame =
     sort(df, colName, parseInt, ascending)
 proc floatSort(df: DataFrame, colName: string, ascending=true): DataFrame =
@@ -240,7 +253,7 @@ proc timeSort(df: DataFrame, colName: string, format=defaultTimeFormat, ascendin
 ###############################################################
 proc mean(df: DataFrame): DataFrame =
     result = initDataFrame()
-    for (colName, s) in df.pairs():
+    for (colName, s) in df.data.pairs():
         try:
             let f = s.toFloat()
             result[colName] = @[f.mean()]
