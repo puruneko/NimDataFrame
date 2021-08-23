@@ -16,6 +16,8 @@ type DataFrame = object
     data: DataFrameData
     indexCol: string
 
+const dfEmpty = ""
+const defaultIndexName = "__index__"
 const defaultTimeFormat = "yyyy/MM/dd HH:mm:ss"
 
 ###############################################################
@@ -23,7 +25,7 @@ const defaultTimeFormat = "yyyy/MM/dd HH:mm:ss"
 #to...    : seriesに対しての型変換
 proc initDataFrame(): DataFrame =
     result.data = initTable[string, Series]()
-    result.indexCol = ""
+    result.indexCol = defaultIndexName
 proc initSeries(): Series =
     result = @[]
 proc initRow(): Row =
@@ -31,6 +33,10 @@ proc initRow(): Row =
 
 proc `[]`(df: DataFrame, colName: string): Series =
     df.data[colName]
+
+proc replace(df: var DataFrame, colName: string, newSeries: Series) =
+    df.data.del(colName)
+    df.data[colName] = newSeries
 
 iterator columns(df: DataFrame): string =
     for key in df.data.keys:
@@ -147,25 +153,39 @@ proc toDataFrame(
     text: string,
     sep=",",
     headers: openArray[string],
-    headerRows= -1
-    indexCol=""
+    headerRows= -1,
+    indexCol="",
 ): DataFrame =
+    #初期化
     result = initDataFrame()
     for colName in headers:
         result[colName] = initSeries()
-    for rowNumber, line in text.split("\n").pairs():
+    #テキストデータの変換
+    let lines = text.split("\n")
+    for rowNumber, line in lines.pairs():
         if rowNumber < headerRows:
             continue
         for (cell, colName) in zip(line.split(sep), headers):
             result.data[colName].add(cell.strip())
+    #インデックスの設定
+    if indexCol != "":
+        if result.getColumnName().contains(indexCol):
+            result.indexCol = indexCol
+        else:
+            raise newException(ValueError, fmt"not found {indexCol}")
+    else:
+        result[defaultIndexName] =
+            collect(newSeq):
+                for i in 0..<lines.len: $i
 
-proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = []): DataFrame =
+proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = [], indexCol=""): DataFrame =
     result = initDataFrame()
     let colCount = max(
         collect(newSeq) do:
             for row in rows:
                 row.len
     )
+    #列名が指定されている場合
     if columns.len > 0:
         if colCount <= columns.len:
             for colName in columns:
@@ -176,10 +196,11 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = []): D
                         if colNumber < row.len:
                             row[colNumber].parseString()
                         else:
-                            ""
+                            dfEmpty
                     )
         else:
             raise newException(ValueError, "each row.len must be lower than columns.len.")
+    #列名が指定されていない場合
     else:
         let colNames = collect(newSeq):
             for i in 0..<colCount:
@@ -192,8 +213,18 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = []): D
                     if colNumber < row.len:
                         row[colNumber].parseString()
                     else:
-                        ""
+                        dfEmpty
                 )
+    #インデックスの設定
+    if indexCol != "":
+        if result.getColumnName().contains(indexCol):
+            result.indexCol = indexCol
+        else:
+            raise newException(ValueError, fmt"not found {indexCol}")
+    else:
+        result[defaultIndexName] =
+            collect(newSeq):
+                for i in 0..<rows.len: $i
 
 
 ###############################################################
@@ -251,22 +282,25 @@ proc timeSort(df: DataFrame, colName: string, format=defaultTimeFormat, ascendin
 
 
 ###############################################################
-proc mean(df: DataFrame): DataFrame =
+proc stat(df: DataFrame, statFn: openArray[float] -> float): DataFrame =
     result = initDataFrame()
     for (colName, s) in df.data.pairs():
         try:
             let f = s.toFloat()
-            result[colName] = @[f.mean()]
+            result[colName] = @[f.statFn()]
         except:
-            result[colName] = ""
+            result[colName] = @[dfEmpty]
+    result.replace(df.indexCol, @["0"])
+proc mean(df: DataFrame): DataFrame =
+    df.stat(stats.mean)
 proc std(df: DataFrame): DataFrame =
-    discard
+    df.stat(stats.standardDeviation)
 proc max(df: DataFrame): DataFrame =
-    discard
+    df.stat(max)
 proc min(df: DataFrame): DataFrame =
-    discard
+    df.stat(min)
 proc v(df: DataFrame): DataFrame =
-    discard
+    df.stat(stats.variance)
 
 ###############################################################
 proc toBe() =
@@ -277,16 +311,16 @@ proc toBe() =
     if not openOk:
         quit(fmt"{filename} open failed.")
     let csv = fp.readAll()
-    echo "--------------------------------"
     #
+    echo "df--------------------------------"
     var df = toDataFrame(
         text=csv,
         headers=["time","name","sales"],
         headerRows=1,
     )
     echo df
-    echo "--------------------------------"
     #
+    echo "df--------------------------------"
     var df1 = toDataFrame(
         [
             @[1,2,3],
@@ -296,31 +330,31 @@ proc toBe() =
         columns=["col1","col2","col3","col10"],
     )
     echo df1
-    echo "--------------------------------"
     #
+    echo "mean--------------------------------"
     echo df.mean()
-    echo "--------------------------------"
     #
+    echo "map--------------------------------"
     echo df["sales"].intMap(c => c*2)
     echo df["time"].timeMap(c => c+initDuration(hours=1))
     var triple = proc(c: int): int =
         c * 3
     echo df["sales"].map(triple, parseInt)
-    echo "--------------------------------"
     #
+    echo "filter--------------------------------"
     echo df.filter(row => row["sales"] >= 1000)
     echo df.filter(row => row["sales"] > 100 and 1000 > row["sales"])
-    echo "--------------------------------"
     #
+    echo "iloc--------------------------------"
     echo df.iloc(0)
-    echo "--------------------------------"
     #
+    echo "sort--------------------------------"
     echo df.sort("sales", parseInt, ascending=true)
     echo df.sort("sales", parseInt, ascending=false)
     echo df.timeSort("time", ascending=false)
-    echo "--------------------------------"
     #[
     #
+    echo "--------------------------------"
     
     ]#
 
