@@ -36,3 +36,14 @@ var t = initTable[seq[string], int]()
 t[@["1","1"]] = 1
 t[@["1","2"]] = 2
 echo t
+
+let aa = collect(newSeq):
+    for x in [1,2,3,4,5,6,7,8]:
+        var a: seq[int] = @[]
+        for y in [1,2,3]:
+            a.add(x)
+        a
+echo aa
+
+for x in toHashSet([@["1","1"],@["1","2"],@["1","1"]]):
+    echo x

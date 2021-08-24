@@ -10,14 +10,17 @@ import algorithm
 import sets
 
 type Cell = string
+type ColName = string
 type Row = Table[string, Cell]
 type Series = seq[Cell]
-type DataFrameData = Table[string, Series]
+type DataFrameData = Table[ColName, Series]
 type DataFrame = object
     data: DataFrameData
     indexCol: string
 type FilterSeries = seq[bool]
-type ColName = string
+type DataFrameGroupBy = object
+    data: Table[seq[ColName], DataFrame]
+    columns: seq[ColName]
 
 const dfEmpty = ""
 const defaultIndexName = "__index__"
@@ -88,6 +91,10 @@ proc initDataFrame(df: DataFrame): DataFrame =
     result = initDataFrame()
     for colName in df.columns:
         result[colName] = initSeries()
+
+proc initDataFrameGroupBy(): DataFrameGroupBy =
+    result.data = initTable[seq[ColName], DataFrame]()
+    result.columns = @[]
 
 proc len(df: DataFrame): int =
     result = max(
@@ -315,6 +322,27 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], i
 
 
 ###############################################################
+proc stat(df: DataFrame, statFn: openArray[float] -> float): DataFrame =
+    result = initDataFrame()
+    for (colName, s) in df.data.pairs():
+        try:
+            let f = s.toFloat()
+            result[colName] = @[f.statFn()]
+        except:
+            result[colName] = @[dfEmpty]
+    result[df.indexCol] = @["0"]
+proc mean(df: DataFrame): DataFrame =
+    df.stat(stats.mean)
+proc std(df: DataFrame): DataFrame =
+    df.stat(stats.standardDeviation)
+proc max(df: DataFrame): DataFrame =
+    df.stat(max)
+proc min(df: DataFrame): DataFrame =
+    df.stat(min)
+proc v(df: DataFrame): DataFrame =
+    df.stat(stats.variance)
+
+###############################################################
 proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
     result = df
     for colName in colNames:
@@ -323,7 +351,7 @@ proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): Data
     result = df
     for renamePair in renameMap:
         if result.data.contains(renamePair[0]):
-            result.data[renamePair[1]] = result.data[renamePair[0]]
+            result[renamePair[1]] = result[renamePair[0]]
             result.data.del(renamePair[0])
 
 proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
@@ -385,26 +413,71 @@ proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries 
 proc dropDuplicates(df: DataFrame, colNames: openArray[ColName] = []): DataFrame =
     df.drop(df.duplicated(colNames))
 
-###############################################################
-proc stat(df: DataFrame, statFn: openArray[float] -> float): DataFrame =
+proc concat(dfs: openArray[DataFrame]): DataFrame =
+    ## 単純に下にDataFrameを連結し続ける
     result = initDataFrame()
-    for (colName, s) in df.data.pairs():
-        try:
-            let f = s.toFloat()
-            result[colName] = @[f.statFn()]
-        except:
-            result[colName] = @[dfEmpty]
-    result[df.indexCol] = @["0"]
-proc mean(df: DataFrame): DataFrame =
-    df.stat(stats.mean)
-proc std(df: DataFrame): DataFrame =
-    df.stat(stats.standardDeviation)
-proc max(df: DataFrame): DataFrame =
-    df.stat(max)
-proc min(df: DataFrame): DataFrame =
-    df.stat(min)
-proc v(df: DataFrame): DataFrame =
-    df.stat(stats.variance)
+    #全列名の抽出
+    let columns = toHashSet(
+        collect(newSeq) do:
+            for df in dfs:
+                for colName in df.columns:
+                    colName
+    ).toSeq()
+    #DataFrameの連結
+    for colName in columns:
+        result[colName] = initSeries()
+    for df in dfs:
+        for colName in columns:
+            if df.data.contains(colName):
+                for c in df[colName]:
+                    result.data[colName].add(c)
+            else:
+                for i in 0..<df.len:
+                    result.data[colName].add(dfEmpty)
+
+
+proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
+    ## DataFrameを指定の列の値でグループ化する（戻り値はDataFrameGroupBy型）
+    result = initDataFrameGroupBy()
+    #マルチインデックスの作成
+    let multiIndex = toHashSet(
+        collect(newSeq) do:
+            for i in 0..<df.len:
+                var index: seq[Cell] = @[]
+                for colName in colNames:
+                    index.add(df[colName][i])
+                index
+    )
+    #データのグループ化
+    result.columns = colNames.toSeq()
+    for mi in multiIndex:
+        result.data[mi] = initDataFrame(df)
+    for i in 0..<df.len:
+        let mi =
+            collect(newSeq):
+                for specifiedColName in colNames:
+                    df[specifiedColName][i]
+        for colName in df.columns:
+            result.data[mi].data[colName].add(df[colName][i])
+proc stat(dfg: DataFrameGroupBy, statFn: DataFrame -> DataFrame): DataFrame =
+    result = initDataFrame()
+    var dfs: seq[DataFrame] = @[]
+    for mi in dfg.data.keys:
+        var df = statFn(dfg.data[mi])
+        for (colName, colValue) in zip(dfg.columns, mi):
+            df[colName] = @[colValue]
+        dfs.add(df)
+    result = concat(dfs = dfs)
+proc mean(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(mean)
+proc std(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(std)
+proc max(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(max)
+proc min(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(min)
+proc v(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(v)
 
 ###############################################################
 proc toBe() =
@@ -424,7 +497,7 @@ proc toBe() =
     )
     echo df
     #
-    echo "df--------------------------------"
+    echo "df1--------------------------------"
     var df1 = toDataFrame(
         [
             @[1,2,3],
@@ -449,8 +522,8 @@ proc toBe() =
     echo df["sales"].map(triple, parseInt)
     #
     echo "filter--------------------------------"
-    echo df.filter(row => row["sales"] >= 1000)
-    echo df.filter(row => row["sales"] > 100 and 1000 > row["sales"])
+    echo df.filter(row => row["sales"] >= 2000)
+    echo df.filter(row => row["sales"] > 1000 and 3000 > row["sales"])
     #
     echo "loc,iloc--------------------------------"
     echo df1.loc("1")
@@ -484,6 +557,13 @@ proc toBe() =
     echo df.dropDuplicates(["sales"])
     echo df.dropDuplicates()
     echo df.dropDuplicates(["time","sales"])
+    #
+    echo "groupby--------------------------------"
+    echo df.groupby(["time","name"])
+    #
+    echo "groupby mean,max--------------------------------"
+    echo df.groupby(["time","name"]).mean()
+    echo df.groupby(["time","name"]).max()
     #[
     ]#
 
