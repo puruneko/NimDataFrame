@@ -330,7 +330,6 @@ proc stat(df: DataFrame, statFn: openArray[float] -> float): DataFrame =
             result[colName] = @[f.statFn()]
         except:
             result[colName] = @[dfEmpty]
-    result[df.indexCol] = @["0"]
 proc mean(df: DataFrame): DataFrame =
     df.stat(stats.mean)
 proc std(df: DataFrame): DataFrame =
@@ -463,7 +462,9 @@ proc stat(dfg: DataFrameGroupBy, statFn: DataFrame -> DataFrame): DataFrame =
     result = initDataFrame()
     var dfs: seq[DataFrame] = @[]
     for mi in dfg.data.keys:
+        #統計値の計算
         var df = statFn(dfg.data[mi])
+        #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
             df[colName] = @[colValue]
         dfs.add(df)
@@ -478,6 +479,21 @@ proc min(dfg: DataFrameGroupBy): DataFrame =
     dfg.stat(min)
 proc v(dfg: DataFrameGroupBy): DataFrame =
     dfg.stat(v)
+proc agg(dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> Cell)]): DataFrame =
+    result = initDataFrame()
+    var dfs: seq[DataFrame] = @[]
+    for mi in dfg.data.keys:
+        #関数の計算
+        var df = initDataFrame()
+        for (colName, fn) in aggFn:
+            let s: Series = dfg.data[mi][colName]
+            let c: Cell = fn(s)
+            df[colName] = @[c]
+        #マルチインデックス値の上書き
+        for (colName, colValue) in zip(dfg.columns, mi):
+            df[colName] = @[colValue]
+        dfs.add(df)
+    result = concat(dfs = dfs)
 
 ###############################################################
 proc toBe() =
@@ -564,6 +580,11 @@ proc toBe() =
     echo "groupby mean,max--------------------------------"
     echo df.groupby(["time","name"]).mean()
     echo df.groupby(["time","name"]).max()
+    #
+    echo "groupby agg--------------------------------"
+    proc aggFn(s: Series): Cell {.closure.} =
+        result = $(s.toFloat().mean()/100)
+    echo df.groupby(["time","name"]).agg({"sales": aggFn})
     #[
     ]#
 
