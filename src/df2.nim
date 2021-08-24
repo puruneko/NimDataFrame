@@ -7,6 +7,7 @@ import tables
 import times
 import stats
 import algorithm
+import sets
 
 type Cell = string
 type Row = Table[string, Cell]
@@ -15,6 +16,8 @@ type DataFrameData = Table[string, Series]
 type DataFrame = object
     data: DataFrameData
     indexCol: string
+type FilterSeries = seq[bool]
+type ColName = string
 
 const dfEmpty = ""
 const defaultIndexName = "__index__"
@@ -23,20 +26,12 @@ const defaultTimeFormat = "yyyy/MM/dd HH:mm:ss"
 ###############################################################
 #parse... : cellに対しての型変換
 #to...    : seriesに対しての型変換
-proc initDataFrame(): DataFrame =
-    result.data = initTable[string, Series]()
-    result.indexCol = defaultIndexName
-proc initSeries(): Series =
-    result = @[]
 proc initRow(): Row =
     result = initTable[string, Cell]()
-
-proc `[]`(df: DataFrame, colName: string): Series =
-    df.data[colName]
-
-proc replace(df: var DataFrame, colName: string, newSeries: Series) =
-    df.data.del(colName)
-    df.data[colName] = newSeries
+proc initSeries(): Series =
+    result = @[]
+proc initFilterSeries(): FilterSeries =
+    result = @[]
 
 iterator columns(df: DataFrame): string =
     for key in df.data.keys:
@@ -61,7 +56,7 @@ proc getSeries(df: DataFrame): seq[Series] =
 proc getRows(df: DataFrame): seq[Row] =
     for row in df.rows:
         result.add(row)
-        
+
 proc `$`(x: DateTime): string =
     x.format(defaultTimeFormat)
 proc parseString[T](x: T): Cell =
@@ -73,25 +68,116 @@ proc genParseTime(format=defaultTimeFormat): Cell -> DateTime =
         proc(c:Cell): DateTime =
             c.parseTime(format)
 
-proc `[]=`[T](df: var DataFrame, colName: string, right: openArray[T]) {. discardable .} =
-    var val = collect(newSeq):
+proc `[]`(df: DataFrame, colName: ColName): Series =
+    ## DataFrameからSeriesを取り出す
+    df.data[colName]
+
+proc `[]=`[T](df: var DataFrame, colName: ColName, right: openArray[T]) {. discardable .} =
+    ## DataFrameのSeriesに代入する
+    ## 代入されるarrayの各値はstringにキャストされる
+    var newSeries = collect(newSeq):
         for c in right:
             c.parseString()
-    df.data.add(colName, val)
+    df.data.del(colName)
+    df.data.add(colName, newSeries)
 
-proc `[]`(df: DataFrame, boolean: seq[bool]): DataFrame =
+proc initDataFrame(): DataFrame =
+    result.data = initTable[ColName, Series]()
+    result.indexCol = defaultIndexName
+proc initDataFrame(df: DataFrame): DataFrame =
     result = initDataFrame()
     for colName in df.columns:
         result[colName] = initSeries()
-    for colName in df.columns:
-        for i, b in boolean.pairs():
-            if b:
-                result.data[colName].add(df.data[colName][i])
 
-proc iloc(df: DataFrame, index: int): Row =
+proc len(df: DataFrame): int =
+    result = max(
+        collect(newSeq) do:
+            for colName in df.columns:
+                df[colName].len
+    )
+
+proc `[]`(df: DataFrame, colNames: openArray[ColName]): DataFrame =
+    ## 指定した列だけ返す
+    result = initDataFrame()
+    let columns = df.getColumnName()
+    for colName in colNames:
+        if not columns.contains(colName):
+            raise newException(ValueError, fmt"df doesn't have column {colName}")
+        result[colName] = df[colName]
+    result[df.indexCol] = df[df.indexCol]
+
+proc keep(df: DataFrame, fs: FilterSeries): DataFrame =
+    ## trueをkeepする（fsがtrueの行だけ返す）
+    result = initDataFrame(df)
+    for colName in df.columns:
+        for i, b in fs.pairs():
+            if b:
+                result.data[colName].add(df[colName][i])
+proc drop(df: DataFrame, fs: FilterSeries): DataFrame =
+    ## trueをdropする（fsがtrueの行を落として返す）（fsがfalseの行だけ返す）
+    result = initDataFrame(df)
+    for colName in df.columns:
+        for i, b in fs.pairs():
+            if not b:
+                result.data[colName].add(df[colName][i])
+
+proc `[]`(df: DataFrame, fs: FilterSeries): DataFrame =
+    ## fsがtrueの行だけ返す
+    df.keep(fs)
+
+proc `[]`(df: DataFrame, slice: HSlice[int, int]): DataFrame =
+    ## sliceの範囲の行だけ返す
+    result = initDataFrame(df)
+    let len = df.len
+    for i in slice:
+        if i < 0 or i >= len:
+            continue
+        for colName in df.columns:
+            result.data[colName].add(df[colName][i])
+
+proc `[]`(df: DataFrame, indices: openArray[int]): DataFrame =
+    ## indicesの行だけ返す
+    result = initDataFrame(df)
+    let len = df.len
+    for i in indices:
+        if i < 0 or i >= len:
+            continue
+        for colName in df.columns:
+            result.data[colName].add(df[colName][i])
+
+proc iloc(df: DataFrame, i: int): Row =
+    ## index番目の行をRow形式で返す
     result = initRow()
     for colName in df.columns:
-        result[colName] = df.data[colName][index]
+        result[colName] = df.data[colName][i]
+
+proc loc(df: DataFrame, c: Cell): DataFrame =
+    ## indexの行の値がcの値と一致する行を返す
+    result = initDataFrame(df)
+    let columns = df.getColumnName()
+    for i in 0..<df.len:
+        if df[df.indexCol][i] == c:
+            for colName in columns:
+                result.data[colName].add(df[colName][i])
+
+proc head(df: DataFrame, num: int): DataFrame =
+    result = initDataFrame(df)
+    for i in 0..<min(num,df.len):
+        for colName in result.columns:
+            result.data[colName].add(df[colName][i])
+proc tail(df: DataFrame, num: int): DataFrame =
+    result = initDataFrame(df)
+    for i in df.len-min(num,df.len)..<df.len:
+        for colName in result.columns:
+            result.data[colName].add(df[colName][i])
+
+proc index(df: DataFrame): Series =
+    df[df.indexCol]
+
+proc shape(df: DataFrame): (int,int) =
+    let colNumber = df.getColumnName.len
+    let rowNumber = df.len
+    result = (rowNumber, colNumber)
 
 ###############################################################
 
@@ -123,6 +209,7 @@ proc `*`(a: float, b: Cell): float =
 proc `/`(a: float, b: Cell): float =
     a / parseFloat(b)
 
+#TODO: int版も作る
 proc `==`(a: Cell, b: float): bool =
     result = a.parseFloat() == b
 proc `!=`(a: Cell, b: float): bool =
@@ -152,8 +239,8 @@ proc `<=`(a: float, b: Cell): bool =
 proc toDataFrame(
     text: string,
     sep=",",
-    headers: openArray[string],
-    headerRows= -1,
+    headers: openArray[ColName],
+    headerRows= 0,
     indexCol="",
 ): DataFrame =
     #初期化
@@ -161,7 +248,7 @@ proc toDataFrame(
     for colName in headers:
         result[colName] = initSeries()
     #テキストデータの変換
-    let lines = text.split("\n")
+    let lines = text.strip().split("\n")
     for rowNumber, line in lines.pairs():
         if rowNumber < headerRows:
             continue
@@ -176,9 +263,9 @@ proc toDataFrame(
     else:
         result[defaultIndexName] =
             collect(newSeq):
-                for i in 0..<lines.len: $i
+                for i in 0..<lines.len-headerRows: $i
 
-proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = [], indexCol=""): DataFrame =
+proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], indexCol=""): DataFrame =
     result = initDataFrame()
     let colCount = max(
         collect(newSeq) do:
@@ -228,11 +315,11 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[string] = [], in
 
 
 ###############################################################
-proc dropColumns(df:DataFrame, colNames: openArray[string]): DataFrame =
+proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
     result = df
     for colName in colNames:
         result.data.del(colName)
-proc renameColumns(df: DataFrame, renameMap: openArray[(string,string)]): DataFrame =
+proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): DataFrame =
     result = df
     for renamePair in renameMap:
         if result.data.contains(renamePair[0]):
@@ -250,15 +337,13 @@ proc timeMap[T](s: Series, fn: DateTime -> T, format=defaultTimeFormat): Series 
     map(s, fn, genParseTime(format))
 
 proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
-    var boolean: seq[bool] = @[]
+    var fs: FilterSeries = initFilterSeries()
     for row in df.rows:
-        boolean.add(fltr(row))
-    result = df[boolean]
+        fs.add(fltr(row))
+    result = df[fs]
 
-proc sort[T](df: DataFrame, colName: string, fromCell: Cell -> T, ascending=true): DataFrame =
-    result = initDataFrame()
-    for colName in df.columns:
-        result[colName] = initSeries()
+proc sort[T](df: DataFrame, colName: ColName, fromCell: Cell -> T, ascending=true): DataFrame =
+    result = initDataFrame(df)
     var sortSource = collect(newSeq):
         for rowNumber, row in df.getRows().pairs():
             (rowNumber, fromCell(row[colName]))
@@ -273,13 +358,32 @@ proc sort[T](df: DataFrame, colName: string, fromCell: Cell -> T, ascending=true
     for sorted in sortSource:
         for colName in df.columns:
             result.data[colName].add(df.data[colName][sorted[0]])
-proc intSort(df: DataFrame, colName: string, ascending=true): DataFrame =
+proc intSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
     sort(df, colName, parseInt, ascending)
-proc floatSort(df: DataFrame, colName: string, ascending=true): DataFrame =
+proc floatSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
     sort(df, colName, parseFloat, ascending)
-proc timeSort(df: DataFrame, colName: string, format=defaultTimeFormat, ascending=true): DataFrame =
+proc timeSort(df: DataFrame, colName: ColName, format=defaultTimeFormat, ascending=true): DataFrame =
     sort(df, colName, genParseTime(format), ascending)
 
+proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries =
+    ## 重複した行はtrue、それ以外はfalse
+    result = initFilterSeries()
+    var checker = initTable[seq[string], bool]()
+    var columns = colNames.toSeq()
+    if columns.len == 0:
+        columns = @[df.indexCol]
+    for i in 0..<df.len:
+        let row =
+            collect(newSeq):
+                for colName in columns:
+                    df[colName][i]
+        if row in checker:
+            result.add(true)
+        else:
+            result.add(false)
+            checker[row] = false
+proc dropDuplicates(df: DataFrame, colNames: openArray[ColName] = []): DataFrame =
+    df.drop(df.duplicated(colNames))
 
 ###############################################################
 proc stat(df: DataFrame, statFn: openArray[float] -> float): DataFrame =
@@ -290,7 +394,7 @@ proc stat(df: DataFrame, statFn: openArray[float] -> float): DataFrame =
             result[colName] = @[f.statFn()]
         except:
             result[colName] = @[dfEmpty]
-    result.replace(df.indexCol, @["0"])
+    result[df.indexCol] = @["0"]
 proc mean(df: DataFrame): DataFrame =
     df.stat(stats.mean)
 proc std(df: DataFrame): DataFrame =
@@ -326,18 +430,21 @@ proc toBe() =
             @[1,2,3],
             @[4,5,6],
             @[7,8,],
+            @[1,10,11,12]
         ],
         columns=["col1","col2","col3","col10"],
+        indexCol="col1"
     )
     echo df1
     #
-    echo "mean--------------------------------"
+    echo "stats--------------------------------"
     echo df.mean()
+    echo df.max()
     #
     echo "map--------------------------------"
     echo df["sales"].intMap(c => c*2)
     echo df["time"].timeMap(c => c+initDuration(hours=1))
-    var triple = proc(c: int): int =
+    let triple = proc(c: int): int =
         c * 3
     echo df["sales"].map(triple, parseInt)
     #
@@ -345,17 +452,39 @@ proc toBe() =
     echo df.filter(row => row["sales"] >= 1000)
     echo df.filter(row => row["sales"] > 100 and 1000 > row["sales"])
     #
-    echo "iloc--------------------------------"
+    echo "loc,iloc--------------------------------"
+    echo df1.loc("1")
     echo df.iloc(0)
     #
+    echo "getRows--------------------------------"
+    echo df.getRows()
+    echo df.getColumnName()
     echo "sort--------------------------------"
     echo df.sort("sales", parseInt, ascending=true)
     echo df.sort("sales", parseInt, ascending=false)
     echo df.timeSort("time", ascending=false)
-    #[
     #
-    echo "--------------------------------"
-    
+    echo "index,shape--------------------------------"
+    echo df.index
+    echo df.shape
+    #
+    echo "[]--------------------------------"
+    echo df[["time","sales"]]
+    echo df[0..4]
+    echo df[[2,4,6]]
+    #
+    echo "head,tail--------------------------------"
+    echo df.head(5)
+    echo df.tail(5)
+    echo df.head(999999999)
+    echo df.tail(999999999)
+    #
+    echo "duplicated--------------------------------"
+    echo df.duplicated(["sales"])
+    echo df.dropDuplicates(["sales"])
+    echo df.dropDuplicates()
+    echo df.dropDuplicates(["time","sales"])
+    #[
     ]#
 
 if isMainModule:
