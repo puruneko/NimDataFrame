@@ -55,3 +55,9 @@ proc test3(): Table[string,int] =
     }.toTable()
 
 echo test3()
+
+for i in countup(0,10,3):
+    echo i..<i+3
+
+let xxx = @[1,2,3,4,5]
+echo xxx[4..10]

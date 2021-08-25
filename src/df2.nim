@@ -23,6 +23,9 @@ type FilterSeries = seq[bool]
 type DataFrameGroupBy = object
     data: Table[seq[ColName], DataFrame]
     columns: seq[ColName]
+type DataFrameResample = object
+    data: DataFrame
+    window: string
 
 const dfEmpty = ""
 const defaultIndexName = "__index__"
@@ -716,6 +719,39 @@ proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): Da
     result = concat(dfs = dfs)
 
 ###############################################################
+proc resample(df: DataFrame, window: int): DataFrameResample =
+    result.data = df
+    result.window = $window
+proc resample(df: DataFrame, window: string): DataFrameResample =
+    result.data = df
+    result.window = window
+proc stat(dfre: DataFrameResample, statFn: Series -> Cell): DataFrame =
+    result = initDataFrame(dfre.data)
+    let w = dfre.window.parseInt()
+    for i in countup(0, dfre.data.len-1, w):
+        for colName in result.columns:
+            var slice = i..<i+w
+            if slice.b >= dfre.data.len:
+                slice.b = dfre.data.len-1
+            result.data[colName].add(statFn(dfre.data[colName][slice]))
+proc count(dfre: DataFrameResample): DataFrame =
+    dfre.stat(count)
+proc sum(dfre: DataFrameResample): DataFrame =
+    dfre.stat(sum)
+proc mean(dfre: DataFrameResample): DataFrame =
+    dfre.stat(mean)
+proc std(dfre: DataFrameResample): DataFrame =
+    dfre.stat(std)
+proc max(dfre: DataFrameResample): DataFrame =
+    dfre.stat(max)
+proc min(dfre: DataFrameResample): DataFrame =
+    dfre.stat(min)
+proc v(dfre: DataFrameResample): DataFrame =
+    dfre.stat(v)
+
+###############################################################
+###############################################################
+###############################################################
 proc toBe() =
     const filename = "sample.csv"
     var fp: File
@@ -732,7 +768,7 @@ proc toBe() =
         headerRows=1,
     )
     echo df
-    df.toCsv("test.csv")
+    #df.toCsv("test.csv")
     #
     echo "dropEmpty--------------------------------"
     echo df.dropEmpty()
@@ -836,6 +872,9 @@ proc toBe() =
             "sales_changed": c
         }.toTable()
     echo df.groupby(["time","name"]).apply(applyFn)
+    #
+    echo "resaple mean--------------------------------"
+    echo df.resample(5).mean()
     #[
     ]#
 
