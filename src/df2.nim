@@ -9,6 +9,7 @@ import stats
 import algorithm
 import sets
 import math
+import encodings
 
 type Cell = string
 type ColName = string
@@ -232,13 +233,28 @@ proc toDataFrame(
     headers: openArray[ColName],
     headerRows= 0,
     indexCol="",
+    encoding="utf-8"
 ): DataFrame =
+    ## テキストで表現されたデータ構造をDataFrameに変換する
+    runnableExamples:
+        var df = toDataFrame(
+            text=tsv,
+            sep="\t",
+            headers=["col1","col2","col3"],
+            headerRows=1,
+        )
+    ##
+
     #初期化
     result = initDataFrame()
     for colName in headers:
         result[colName] = initSeries()
+    #エンコード変換
+    let ec = open("utf-8", encoding)
+    defer: ec.close()
+    let textConverted = ec.convert(text)
     #テキストデータの変換
-    let lines = text.strip().split("\n")
+    let lines = textConverted.strip().split("\n")
     for rowNumber, line in lines.pairs():
         if rowNumber < headerRows:
             continue
@@ -256,6 +272,20 @@ proc toDataFrame(
                 for i in 0..<lines.len-headerRows: $i
 
 proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], indexCol=""): DataFrame =
+    ## 配列で表現されたデータ構造をDataFrameに変換する
+    runnableExamples:
+        var df = toDataFrame(
+            [
+                @[1,2,3],
+                @[4,5,6],
+                @[7,8,],
+                @[1,10,11,12]
+            ],
+            columns=["col1","col2","col3","col4"],
+            indexCol="col1"
+        )
+    ##
+
     result = initDataFrame()
     let colCount = max(
         collect(newSeq) do:
@@ -279,6 +309,7 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], i
             raise newException(ValueError, "each row.len must be lower than columns.len.")
     #列名が指定されていない場合
     else:
+        #列数は各行の長さの最大値
         let colNames = collect(newSeq):
             for i in 0..<colCount:
                 fmt"col{i}"
@@ -304,8 +335,34 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], i
                 for i in 0..<rows.len: $i
 
 ###############################################################
+proc toCsv(df: DataFrame, filename: string, encoding="utf-8") =
+    var fp: File
+    let openOk = fp.open(filename, fmWrite)
+    defer: fp.close()
+    if not openOk:
+        raise newException(ValueError, fmt"{filename} open error.")
+    #
+    let ec = open(encoding, "utf-8")
+    defer: ec.close()
+    var csv = ""
+    var line = ""
+    for colName in df.columns:
+        line &= (colName & ",")
+    csv &= ec.convert(line[0..<line.len-1] & "\n")
+    for i in 0..<df.len:
+        line = ""
+        for colName in df.columns:
+            line &= df[colName][i] & ","
+        csv &= ec.convert(line[0..<line.len-1] & "\n")
+    fp.write(csv)
+
+###############################################################
 proc concat(dfs: openArray[DataFrame]): DataFrame =
     ## 単純に下にDataFrameを連結し続ける
+    runnableExamples:
+        concat([df1, df2, df3])
+    ##
+
     result = initDataFrame()
     #全列名の抽出
     let columns = toHashSet(
@@ -328,6 +385,7 @@ proc concat(dfs: openArray[DataFrame]): DataFrame =
 
 ###############################################################
 proc `+`(a: Cell, b: float): float =
+    ## 左辺Cell型、右辺float型の加算を計算する
     parseFloat(a) + b
 proc `-`(a: Cell, b: float): float =
     parseFloat(a) - b
@@ -336,6 +394,7 @@ proc `*`(a: Cell, b: float): float =
 proc `/`(a: Cell, b: float): float =
     parseFloat(a) / b
 proc `+`(a: float, b: Cell): float =
+    ## 左辺float型、右辺Cell型の加算を計算する
     a + parseFloat(b)
 proc `-`(a: float, b: Cell): float =
     a - parseFloat(b)
@@ -346,6 +405,7 @@ proc `/`(a: float, b: Cell): float =
 
 #TODO: int版も作る
 proc `==`(a: Cell, b: float): bool =
+    ## 左辺Cell型、右辺float型を等価比較する
     result = a.parseFloat() == b
 proc `!=`(a: Cell, b: float): bool =
     result = a.parseFloat() != b
@@ -358,6 +418,7 @@ proc `>=`(a: Cell, b: float): bool =
 proc `<=`(a: Cell, b: float): bool =
     result = a.parseFloat() <= b
 proc `==`(a: float, b: Cell): bool =
+    ## 左辺float型、右辺Cell型を等価比較する
     result = a == b.parseFloat()
 proc `!=`(a: float, b: Cell): bool =
     result = a != b.parseFloat()
@@ -371,6 +432,12 @@ proc `<=`(a: float, b: Cell): bool =
     result = a <= b.parseFloat()
     
 proc stat(s: Series, statFn: openArray[float] -> float): Cell =
+    ## Seriesの統計量を計算する
+    ## statFnにはSeriesをfloat変換した配列の統計量を計算する関数を指定する
+    runnableExamples:
+        df["col1"].stat(stats.mean)
+    ##
+
     try:
         let f = s.toFloat()
         result = statFn(f).parseString()
@@ -393,29 +460,39 @@ proc min(s: Series): Cell =
 proc v(s: Series): Cell =
     s.stat(stats.variance)
 
-proc stat(df: DataFrame, statFn: openArray[float] -> float): DataFrame =
+proc stat(df: DataFrame, statFn: Series -> Cell): DataFrame =
+    ## DataFrameの各列に対して統計量を計算する
+    ## statFnにはSeriesの統計量を計算する関数を指定する
+    runnableExamples:
+        df.stat(mean)
+    ##
+
     result = initDataFrame()
     for (colName, s) in df.data.pairs():
-        let c = stat(s, statFn)
+        let c = statFn(s)
         result[colName] = @[c]
 proc count(df: DataFrame): DataFrame =
-    let cnt = proc(s: openArray[float]): float =
-        float(s.len)
-    df.stat(cnt)
+    df.stat(count)
 proc sum(df: DataFrame): DataFrame =
     df.stat(sum)
 proc mean(df: DataFrame): DataFrame =
-    df.stat(stats.mean)
+    df.stat(mean)
 proc std(df: DataFrame): DataFrame =
-    df.stat(stats.standardDeviation)
+    df.stat(std)
 proc max(df: DataFrame): DataFrame =
     df.stat(max)
 proc min(df: DataFrame): DataFrame =
     df.stat(min)
 proc v(df: DataFrame): DataFrame =
-    df.stat(stats.variance)
+    df.stat(v)
 
 proc stat(dfg: DataFrameGroupBy, statFn: DataFrame -> DataFrame): DataFrame =
+    ## groupbyしたDataFrameに対して統計量を計算する
+    ## statFnにはDataFrameの統計量を計算する関数を指定する
+    runnableExamples:
+        df.groupby(["col1","col2"]).stat(sum)
+    ##
+
     result = initDataFrame()
     var dfs: seq[DataFrame] = @[]
     for mi in dfg.data.keys:
@@ -443,17 +520,47 @@ proc v(dfg: DataFrameGroupBy): DataFrame =
 
 ###############################################################
 proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
+    ## 指定のDataFrameの列を削除する
+    runnableExamples:
+        df.dropColumns(["col1","col2"])
+    ##
+
     result = df
     for colName in colNames:
         result.data.del(colName)
 proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): DataFrame =
+    ## DataFrameの列名を変更する
+    ## renameMapには変更前列名と変更後列名のペアを指定する
+    runnableExamples:
+        df.renameColumns({"col1":"COL1","col2":"COL2"})
+    ##
+
     result = df
     for renamePair in renameMap:
         if result.data.contains(renamePair[0]):
             result[renamePair[1]] = result[renamePair[0]]
             result.data.del(renamePair[0])
 
+proc resetIndex(df: DataFrame): DataFrame =
+    result = initDataFrame(df)
+    for colName in df.columns:
+        if colName == df.indexCol:
+            result[colName] =
+                collect(newSeq):
+                    for i in 0..<df.len: $i
+        else:
+            result[colName] = df[colName]
+
+###############################################################
 proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
+    ## Seriesの各セルに対して関数fnを適用する
+    ## 関数fnにはSeriesの各セルが渡され、関数fnは文字列に変換可能な任意の型を返す
+    ## 文字列型以外の操作を関数fn内で行う場合、fromCell関数にCell型から任意の型に変換する関数を渡す
+    runnableExamples:
+        let triple = proc(c: int): int = c * 3
+        df["col1"].map(triple, parseInt)
+    ##
+
     for c in s:
         result.add(fn(fromCell(c)).parseString())
 proc intMap[T](s: Series, fn: int -> T): Series =
@@ -463,13 +570,24 @@ proc floatMap[T](s: Series, fn: float -> T): Series =
 proc timeMap[T](s: Series, fn: DateTime -> T, format=defaultTimeFormat): Series =
     map(s, fn, genParseTime(format))
 
+###############################################################
 proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
+    ## fltr関数に従ってDataFrameにフィルタをかける
+    ## fltr関数にはDataFrameの各列が渡され、fltr関数は論理値を返す
+    runnableExamples:
+        df.filter(row => row["col1"] > 1000 and 3000 > row["col2"])
+    ##
+
     var fs: FilterSeries = initFilterSeries()
     for row in df.rows:
         fs.add(fltr(row))
     result = df[fs]
 
+###############################################################
 proc sort[T](df: DataFrame, colName: ColName, fromCell: Cell -> T, ascending=true): DataFrame =
+    ## DataFrameを指定列でソートする
+    ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する
+    ##
     result = initDataFrame(df)
     var sortSource = collect(newSeq):
         for rowNumber, row in df.getRows().pairs():
@@ -485,6 +603,9 @@ proc sort[T](df: DataFrame, colName: ColName, fromCell: Cell -> T, ascending=tru
     for sorted in sortSource:
         for colName in df.columns:
             result.data[colName].add(df.data[colName][sorted[0]])
+proc sort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
+    let f = proc(c: Cell): Cell = c
+    sort(df, colName, f, ascending)
 proc intSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
     sort(df, colName, parseInt, ascending)
 proc floatSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
@@ -492,13 +613,16 @@ proc floatSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
 proc timeSort(df: DataFrame, colName: ColName, format=defaultTimeFormat, ascending=true): DataFrame =
     sort(df, colName, genParseTime(format), ascending)
 
+###############################################################
 proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries =
     ## 重複した行はtrue、それ以外はfalse
+    ##
     result = initFilterSeries()
     var checker = initTable[seq[string], bool]()
     var columns = colNames.toSeq()
     if columns.len == 0:
         columns = @[df.indexCol]
+    #1行ずつ見ていって、同じものがあったらtrue、まだないならfalseを格納
     for i in 0..<df.len:
         let row =
             collect(newSeq):
@@ -510,10 +634,14 @@ proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries 
             result.add(false)
             checker[row] = false
 proc dropDuplicates(df: DataFrame, colNames: openArray[ColName] = []): DataFrame =
+    ## 重複した行を消す
+    ##
     df.drop(df.duplicated(colNames))
 
+###############################################################
 proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
     ## DataFrameを指定の列の値でグループ化する（戻り値はDataFrameGroupBy型）
+    ## 
     result = initDataFrameGroupBy()
     #マルチインデックスの作成
     let multiIndex = toHashSet(
@@ -537,11 +665,13 @@ proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
             result.data[mi].data[colName].add(df[colName][i])
 proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): DataFrame =
     ## groupbyしたDataFrameの各列に対して関数を実行する
+    ## 指定する関数に{.closure.}オプションをつけないとエラーになる
     runnableExamples:
-        proc f(series: Series): Cell{.closure.} =
+        proc f(series: Series): float{.closure.} =
             series.toFloat().mean()/100
         df.groupby(["col1","col2"]).agg({"col3",f})
-    ## 指定する関数に{.closure.}オプションをつけないとエラーになる
+    ##
+
     result = initDataFrame()
     var dfs: seq[DataFrame] = @[]
     for mi in dfg.data.keys:
@@ -557,6 +687,7 @@ proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): Data
     result = concat(dfs = dfs)
 proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): DataFrame =
     ## groupby下DataFrameの各groupに対して関数を実行する
+    ## 関数はTableを返すことに注意
     runnableExamples:
         proc f(df: DataFrame): Table[ColName,Cell] =
             var cell: Cell
@@ -567,8 +698,9 @@ proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): Da
             result = {
                 "col3_changed": cell
             }.toTable()
-        echo df.groupby(["col1","col2"]).apply(f)
-    ## 関数はTableを返すことに注意
+        df.groupby(["col1","col2"]).apply(f)
+    ##
+
     result = initDataFrame()
     var dfs: seq[DataFrame] = @[]
     for mi in dfg.data.keys:
@@ -596,10 +728,11 @@ proc toBe() =
     echo "df--------------------------------"
     var df = toDataFrame(
         text=csv,
-        headers=["time","name","sales"],
+        headers=["time","name","sales","日本語"],
         headerRows=1,
     )
     echo df
+    df.toCsv("test.csv")
     #
     echo "dropEmpty--------------------------------"
     echo df.dropEmpty()
@@ -620,6 +753,12 @@ proc toBe() =
         indexCol="col1"
     )
     echo df1
+    #
+    echo "drop--------------------------------"
+    echo df.dropColumns(["time","name"])
+    #
+    echo "rename--------------------------------"
+    echo df.renameColumns({"time":"TIME","name":"NAME","sales":"SALES"})
     #
     echo "stats--------------------------------"
     echo df.mean()
@@ -643,10 +782,15 @@ proc toBe() =
     echo "getRows--------------------------------"
     echo df.getRows()
     echo df.getColumnName()
+    #
     echo "sort--------------------------------"
+    echo df.sort("name", ascending=false)
     echo df.sort("sales", parseInt, ascending=true)
     echo df.sort("sales", parseInt, ascending=false)
     echo df.timeSort("time", ascending=false)
+    #
+    echo "resetIndex--------------------------------"
+    echo df.intSort("sales").resetIndex()
     #
     echo "index,shape--------------------------------"
     echo df.index
@@ -677,8 +821,8 @@ proc toBe() =
     echo df.groupby(["time","name"]).max()
     #
     echo "groupby agg--------------------------------"
-    proc aggFn(s: Series): Cell {.closure.} =
-        result = $(s.toFloat().mean()/100)
+    proc aggFn(s: Series): float {.closure.} =
+        result = s.toFloat().mean()/100
     echo df.groupby(["time","name"]).agg({"sales": aggFn})
     #
     echo "groupby apply--------------------------------"
