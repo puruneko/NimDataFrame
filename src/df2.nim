@@ -72,6 +72,17 @@ proc genParseTime(format=defaultTimeFormat): Cell -> DateTime =
         proc(c:Cell): DateTime =
             c.parseTime(format)
 
+proc to[T](s: Series, parser: Cell -> T): seq[T] =
+    result = collect(newSeq):
+        for c in s:
+            parser(c)
+proc toInt(s: Series): seq[int] =
+    to(s, parseInt)
+proc toFloat(s: Series): seq[float] =
+    to(s, parseFloat)
+proc toTime(s: Series, format=defaultTimeFormat): seq[DateTime] =
+    to(s, genParseTime(format))
+
 proc `[]`(df: DataFrame, colName: ColName): Series =
     ## DataFrameからSeriesを取り出す
     df.data[colName]
@@ -187,6 +198,7 @@ proc shape(df: DataFrame): (int,int) =
     let rowNumber = df.len
     result = (rowNumber, colNumber)
 
+###############################################################
 proc fillEmpty[T](s: Series, fill: T): Series =
     result =
         collect(newSeq):
@@ -200,19 +212,18 @@ proc fillEmpty[T](df: DataFrame, fill: T): DataFrame =
     for colName in result.columns:
         result[colName] = fillEmpty(df[colName], fill)
 
-
-###############################################################
-
-proc to[T](s: Series, parser: Cell -> T): seq[T] =
-    result = collect(newSeq):
-        for c in s:
-            parser(c)
-proc toInt(s: Series): seq[int] =
-    to(s, parseInt)
-proc toFloat(s: Series): seq[float] =
-    to(s, parseFloat)
-proc toTime(s: Series, format=defaultTimeFormat): seq[DateTime] =
-    to(s, genParseTime(format))
+proc dropEmpty(df: DataFrame): DataFrame =
+    result = initDataFrame(df)
+    for i in 0..<df.len:
+        var skip = false
+        for colName in df.columns:
+            if df[colName][i] == dfEmpty:
+                skip = true
+                break
+        if skip:
+            continue
+        for colName in df.columns:
+            result.data[colName].add(df[colName][i])
 
 ###############################################################
 proc toDataFrame(
@@ -589,6 +600,9 @@ proc toBe() =
         headerRows=1,
     )
     echo df
+    #
+    echo "dropEmpty--------------------------------"
+    echo df.dropEmpty()
     #
     echo "fillEmpty--------------------------------"
     df["sales"] = df["sales"].fillEmpty(0)
