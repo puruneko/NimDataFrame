@@ -47,3 +47,11 @@ echo aa
 
 for x in toHashSet([@["1","1"],@["1","2"],@["1","1"]]):
     echo x
+
+proc test3(): Table[string,int] =
+    result = {
+        "a": 1,
+        "b": 2,
+    }.toTable()
+
+echo test3()

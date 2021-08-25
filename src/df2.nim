@@ -8,6 +8,7 @@ import times
 import stats
 import algorithm
 import sets
+import math
 
 type Cell = string
 type ColName = string
@@ -186,6 +187,20 @@ proc shape(df: DataFrame): (int,int) =
     let rowNumber = df.len
     result = (rowNumber, colNumber)
 
+proc fillEmpty[T](s: Series, fill: T): Series =
+    result =
+        collect(newSeq):
+            for c in s:
+                if c == dfEmpty:
+                    fill.parseString()
+                else:
+                    c
+proc fillEmpty[T](df: DataFrame, fill: T): DataFrame =
+    result = initDataFrame(df)
+    for colName in result.columns:
+        result[colName] = fillEmpty(df[colName], fill)
+
+
 ###############################################################
 
 proc to[T](s: Series, parser: Cell -> T): seq[T] =
@@ -199,49 +214,6 @@ proc toFloat(s: Series): seq[float] =
 proc toTime(s: Series, format=defaultTimeFormat): seq[DateTime] =
     to(s, genParseTime(format))
 
-proc `+`(a: Cell, b: float): float =
-    parseFloat(a) + b
-proc `-`(a: Cell, b: float): float =
-    parseFloat(a) - b
-proc `*`(a: Cell, b: float): float =
-    parseFloat(a) * b
-proc `/`(a: Cell, b: float): float =
-    parseFloat(a) / b
-proc `+`(a: float, b: Cell): float =
-    a + parseFloat(b)
-proc `-`(a: float, b: Cell): float =
-    a - parseFloat(b)
-proc `*`(a: float, b: Cell): float =
-    a * parseFloat(b)
-proc `/`(a: float, b: Cell): float =
-    a / parseFloat(b)
-
-#TODO: int版も作る
-proc `==`(a: Cell, b: float): bool =
-    result = a.parseFloat() == b
-proc `!=`(a: Cell, b: float): bool =
-    result = a.parseFloat() != b
-proc `>`(a: Cell, b: float): bool =
-    result = a.parseFloat() > b
-proc `<`(a: Cell, b: float): bool =
-    result = a.parseFloat() < b
-proc `>=`(a: Cell, b: float): bool =
-    result = a.parseFloat() >= b
-proc `<=`(a: Cell, b: float): bool =
-    result = a.parseFloat() <= b
-proc `==`(a: float, b: Cell): bool =
-    result = a == b.parseFloat()
-proc `!=`(a: float, b: Cell): bool =
-    result = a != b.parseFloat()
-proc `>`(a: float, b: Cell): bool =
-    result = a > b.parseFloat()
-proc `<`(a: float, b: Cell): bool =
-    result = a < b.parseFloat()
-proc `>=`(a: float, b: Cell): bool =
-    result = a >= b.parseFloat()
-proc `<=`(a: float, b: Cell): bool =
-    result = a <= b.parseFloat()
-    
 ###############################################################
 proc toDataFrame(
     text: string,
@@ -320,16 +292,107 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], i
             collect(newSeq):
                 for i in 0..<rows.len: $i
 
+###############################################################
+proc concat(dfs: openArray[DataFrame]): DataFrame =
+    ## 単純に下にDataFrameを連結し続ける
+    result = initDataFrame()
+    #全列名の抽出
+    let columns = toHashSet(
+        collect(newSeq) do:
+            for df in dfs:
+                for colName in df.columns:
+                    colName
+    ).toSeq()
+    #DataFrameの連結
+    for colName in columns:
+        result[colName] = initSeries()
+    for df in dfs:
+        for colName in columns:
+            if df.data.contains(colName):
+                for c in df[colName]:
+                    result.data[colName].add(c)
+            else:
+                for i in 0..<df.len:
+                    result.data[colName].add(dfEmpty)
 
 ###############################################################
+proc `+`(a: Cell, b: float): float =
+    parseFloat(a) + b
+proc `-`(a: Cell, b: float): float =
+    parseFloat(a) - b
+proc `*`(a: Cell, b: float): float =
+    parseFloat(a) * b
+proc `/`(a: Cell, b: float): float =
+    parseFloat(a) / b
+proc `+`(a: float, b: Cell): float =
+    a + parseFloat(b)
+proc `-`(a: float, b: Cell): float =
+    a - parseFloat(b)
+proc `*`(a: float, b: Cell): float =
+    a * parseFloat(b)
+proc `/`(a: float, b: Cell): float =
+    a / parseFloat(b)
+
+#TODO: int版も作る
+proc `==`(a: Cell, b: float): bool =
+    result = a.parseFloat() == b
+proc `!=`(a: Cell, b: float): bool =
+    result = a.parseFloat() != b
+proc `>`(a: Cell, b: float): bool =
+    result = a.parseFloat() > b
+proc `<`(a: Cell, b: float): bool =
+    result = a.parseFloat() < b
+proc `>=`(a: Cell, b: float): bool =
+    result = a.parseFloat() >= b
+proc `<=`(a: Cell, b: float): bool =
+    result = a.parseFloat() <= b
+proc `==`(a: float, b: Cell): bool =
+    result = a == b.parseFloat()
+proc `!=`(a: float, b: Cell): bool =
+    result = a != b.parseFloat()
+proc `>`(a: float, b: Cell): bool =
+    result = a > b.parseFloat()
+proc `<`(a: float, b: Cell): bool =
+    result = a < b.parseFloat()
+proc `>=`(a: float, b: Cell): bool =
+    result = a >= b.parseFloat()
+proc `<=`(a: float, b: Cell): bool =
+    result = a <= b.parseFloat()
+    
+proc stat(s: Series, statFn: openArray[float] -> float): Cell =
+    try:
+        let f = s.toFloat()
+        result = statFn(f).parseString()
+    except:
+        result = dfEmpty
+proc count(s: Series): Cell =
+    let cnt = proc(s: openArray[float]): float =
+        float(s.len)
+    s.stat(cnt)
+proc sum(s: Series): Cell =
+    s.stat(sum)
+proc mean(s: Series): Cell =
+    s.stat(stats.mean)
+proc std(s: Series): Cell =
+    s.stat(stats.standardDeviation)
+proc max(s: Series): Cell =
+    s.stat(max)
+proc min(s: Series): Cell =
+    s.stat(min)
+proc v(s: Series): Cell =
+    s.stat(stats.variance)
+
 proc stat(df: DataFrame, statFn: openArray[float] -> float): DataFrame =
     result = initDataFrame()
     for (colName, s) in df.data.pairs():
-        try:
-            let f = s.toFloat()
-            result[colName] = @[f.statFn()]
-        except:
-            result[colName] = @[dfEmpty]
+        let c = stat(s, statFn)
+        result[colName] = @[c]
+proc count(df: DataFrame): DataFrame =
+    let cnt = proc(s: openArray[float]): float =
+        float(s.len)
+    df.stat(cnt)
+proc sum(df: DataFrame): DataFrame =
+    df.stat(sum)
 proc mean(df: DataFrame): DataFrame =
     df.stat(stats.mean)
 proc std(df: DataFrame): DataFrame =
@@ -340,6 +403,32 @@ proc min(df: DataFrame): DataFrame =
     df.stat(min)
 proc v(df: DataFrame): DataFrame =
     df.stat(stats.variance)
+
+proc stat(dfg: DataFrameGroupBy, statFn: DataFrame -> DataFrame): DataFrame =
+    result = initDataFrame()
+    var dfs: seq[DataFrame] = @[]
+    for mi in dfg.data.keys:
+        #統計値の計算
+        var df = statFn(dfg.data[mi])
+        #マルチインデックス値の上書き
+        for (colName, colValue) in zip(dfg.columns, mi):
+            df[colName] = @[colValue]
+        dfs.add(df)
+    result = concat(dfs = dfs)
+proc count(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(count)
+proc sum(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(sum)
+proc mean(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(mean)
+proc std(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(std)
+proc max(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(max)
+proc min(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(min)
+proc v(dfg: DataFrameGroupBy): DataFrame =
+    dfg.stat(v)
 
 ###############################################################
 proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
@@ -412,29 +501,6 @@ proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries 
 proc dropDuplicates(df: DataFrame, colNames: openArray[ColName] = []): DataFrame =
     df.drop(df.duplicated(colNames))
 
-proc concat(dfs: openArray[DataFrame]): DataFrame =
-    ## 単純に下にDataFrameを連結し続ける
-    result = initDataFrame()
-    #全列名の抽出
-    let columns = toHashSet(
-        collect(newSeq) do:
-            for df in dfs:
-                for colName in df.columns:
-                    colName
-    ).toSeq()
-    #DataFrameの連結
-    for colName in columns:
-        result[colName] = initSeries()
-    for df in dfs:
-        for colName in columns:
-            if df.data.contains(colName):
-                for c in df[colName]:
-                    result.data[colName].add(c)
-            else:
-                for i in 0..<df.len:
-                    result.data[colName].add(dfEmpty)
-
-
 proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
     ## DataFrameを指定の列の値でグループ化する（戻り値はDataFrameGroupBy型）
     result = initDataFrameGroupBy()
@@ -458,37 +524,48 @@ proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
                     df[specifiedColName][i]
         for colName in df.columns:
             result.data[mi].data[colName].add(df[colName][i])
-proc stat(dfg: DataFrameGroupBy, statFn: DataFrame -> DataFrame): DataFrame =
-    result = initDataFrame()
-    var dfs: seq[DataFrame] = @[]
-    for mi in dfg.data.keys:
-        #統計値の計算
-        var df = statFn(dfg.data[mi])
-        #マルチインデックス値の上書き
-        for (colName, colValue) in zip(dfg.columns, mi):
-            df[colName] = @[colValue]
-        dfs.add(df)
-    result = concat(dfs = dfs)
-proc mean(dfg: DataFrameGroupBy): DataFrame =
-    dfg.stat(mean)
-proc std(dfg: DataFrameGroupBy): DataFrame =
-    dfg.stat(std)
-proc max(dfg: DataFrameGroupBy): DataFrame =
-    dfg.stat(max)
-proc min(dfg: DataFrameGroupBy): DataFrame =
-    dfg.stat(min)
-proc v(dfg: DataFrameGroupBy): DataFrame =
-    dfg.stat(v)
-proc agg(dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> Cell)]): DataFrame =
+proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): DataFrame =
+    ## groupbyしたDataFrameの各列に対して関数を実行する
+    runnableExamples:
+        proc f(series: Series): Cell{.closure.} =
+            series.toFloat().mean()/100
+        df.groupby(["col1","col2"]).agg({"col3",f})
+    ## 指定する関数に{.closure.}オプションをつけないとエラーになる
     result = initDataFrame()
     var dfs: seq[DataFrame] = @[]
     for mi in dfg.data.keys:
         #関数の計算
         var df = initDataFrame()
         for (colName, fn) in aggFn:
-            let s: Series = dfg.data[mi][colName]
-            let c: Cell = fn(s)
-            df[colName] = @[c]
+            let c = fn(dfg.data[mi][colName])
+            df[colName] = @[c.parseString()]
+        #マルチインデックス値の上書き
+        for (colName, colValue) in zip(dfg.columns, mi):
+            df[colName] = @[colValue]
+        dfs.add(df)
+    result = concat(dfs = dfs)
+proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): DataFrame =
+    ## groupby下DataFrameの各groupに対して関数を実行する
+    runnableExamples:
+        proc f(df: DataFrame): Table[ColName,Cell] =
+            var cell: Cell
+            if df["col2"][0] == "abc":
+                cell = df["col3"].intMap(c => c/10).mean()
+            else:
+                cell = df["col3"].intMap(c => c*10).mean()
+            result = {
+                "col3_changed": cell
+            }.toTable()
+        echo df.groupby(["col1","col2"]).apply(f)
+    ## 関数はTableを返すことに注意
+    result = initDataFrame()
+    var dfs: seq[DataFrame] = @[]
+    for mi in dfg.data.keys:
+        #関数の計算
+        var df = initDataFrame()
+        var applyTable = applyFn(dfg.data[mi])
+        for (colName, c) in applyTable.pairs():
+            df[colName] = @[c.parseString()]
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
             df[colName] = @[colValue]
@@ -511,6 +588,10 @@ proc toBe() =
         headers=["time","name","sales"],
         headerRows=1,
     )
+    echo df
+    #
+    echo "fillEmpty--------------------------------"
+    df["sales"] = df["sales"].fillEmpty(0)
     echo df
     #
     echo "df1--------------------------------"
@@ -585,6 +666,18 @@ proc toBe() =
     proc aggFn(s: Series): Cell {.closure.} =
         result = $(s.toFloat().mean()/100)
     echo df.groupby(["time","name"]).agg({"sales": aggFn})
+    #
+    echo "groupby apply--------------------------------"
+    proc applyFn(df: DataFrame): Table[ColName,Cell] =
+        var c: Cell
+        if df["name"][0] == "abc":
+            c = df["sales"].intMap(c => c/10).mean()
+        else:
+            c = df["sales"].intMap(c => c*10).mean()
+        result = {
+            "sales_changed": c
+        }.toTable()
+    echo df.groupby(["time","name"]).apply(applyFn)
     #[
     ]#
 
