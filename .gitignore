@@ -1,4 +1,5 @@
 nimcache/
 nimblecache/
 htmldocs/
-*.exe
+*.exe.
+ipynb_checkpoints/

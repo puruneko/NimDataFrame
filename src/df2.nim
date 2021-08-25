@@ -10,7 +10,9 @@ import algorithm
 import sets
 import math
 import encodings
+import re
 
+###############################################################
 type Cell = string
 type ColName = string
 type Row = Table[string, Cell]
@@ -26,10 +28,16 @@ type DataFrameGroupBy = object
 type DataFrameResample = object
     data: DataFrame
     window: string
+    format: string
 
+###############################################################
+type NimDataFrameError = object of CatchableError
+type UnimplementedError = object of CatchableError
+
+###############################################################
 const dfEmpty = ""
 const defaultIndexName = "__index__"
-const defaultTimeFormat = "yyyy/MM/dd HH:mm:ss"
+const defaultDateTimeFormat = "yyyy-MM-dd HH:mm:ss"
 
 ###############################################################
 #parse... : cellに対しての型変換
@@ -66,15 +74,15 @@ proc getRows(df: DataFrame): seq[Row] =
         result.add(row)
 
 proc `$`(x: DateTime): string =
-    x.format(defaultTimeFormat)
+    x.format(defaultDateTimeFormat)
 proc parseString[T](x: T): Cell =
     $x
-proc parseTime(c: Cell, format=defaultTimeFormat): DateTime =
+proc parseDatetime(c: Cell, format=defaultDateTimeFormat): DateTime =
     c.parse(format)
-proc genParseTime(format=defaultTimeFormat): Cell -> DateTime =
+proc genParseDatetime(format=defaultDateTimeFormat): Cell -> DateTime =
     result =
         proc(c:Cell): DateTime =
-            c.parseTime(format)
+            c.parseDatetime(format)
 
 proc to[T](s: Series, parser: Cell -> T): seq[T] =
     result = collect(newSeq):
@@ -84,16 +92,16 @@ proc toInt(s: Series): seq[int] =
     to(s, parseInt)
 proc toFloat(s: Series): seq[float] =
     to(s, parseFloat)
-proc toTime(s: Series, format=defaultTimeFormat): seq[DateTime] =
-    to(s, genParseTime(format))
+proc toDatetime(s: Series, format=defaultDateTimeFormat): seq[DateTime] =
+    to(s, genParseDatetime(format))
 
 proc `[]`(df: DataFrame, colName: ColName): Series =
-    ## DataFrameからSeriesを取り出す
+    ## DataFrameからSeriesを取り出す。
     df.data[colName]
 
 proc `[]=`[T](df: var DataFrame, colName: ColName, right: openArray[T]) {. discardable .} =
-    ## DataFrameのSeriesに代入する
-    ## 代入されるarrayの各値はstringにキャストされる
+    ## DataFrameのSeriesに代入する。
+    ## 代入されるarrayの各値はstringにキャストされる。
     var newSeries = collect(newSeq):
         for c in right:
             c.parseString()
@@ -120,24 +128,24 @@ proc len(df: DataFrame): int =
     )
 
 proc `[]`(df: DataFrame, colNames: openArray[ColName]): DataFrame =
-    ## 指定した列だけ返す
+    ## 指定した列だけ返す。
     result = initDataFrame()
     let columns = df.getColumnName()
     for colName in colNames:
         if not columns.contains(colName):
-            raise newException(ValueError, fmt"df doesn't have column {colName}")
+            raise newException(NimDataFrameError, fmt"df doesn't have column {colName}")
         result[colName] = df[colName]
     result[df.indexCol] = df[df.indexCol]
 
 proc keep(df: DataFrame, fs: FilterSeries): DataFrame =
-    ## trueをkeepする（fsがtrueの行だけ返す）
+    ## trueをkeepする（fsがtrueの行だけ返す）。
     result = initDataFrame(df)
     for colName in df.columns:
         for i, b in fs.pairs():
             if b:
                 result.data[colName].add(df[colName][i])
 proc drop(df: DataFrame, fs: FilterSeries): DataFrame =
-    ## trueをdropする（fsがtrueの行を落として返す）（fsがfalseの行だけ返す）
+    ## trueをdropする（fsがtrueの行を落として返す）（fsがfalseの行だけ返す）。
     result = initDataFrame(df)
     for colName in df.columns:
         for i, b in fs.pairs():
@@ -145,11 +153,11 @@ proc drop(df: DataFrame, fs: FilterSeries): DataFrame =
                 result.data[colName].add(df[colName][i])
 
 proc `[]`(df: DataFrame, fs: FilterSeries): DataFrame =
-    ## fsがtrueの行だけ返す
+    ## fsがtrueの行だけ返す。
     df.keep(fs)
 
 proc `[]`(df: DataFrame, slice: HSlice[int, int]): DataFrame =
-    ## sliceの範囲の行だけ返す
+    ## sliceの範囲の行だけ返す。
     result = initDataFrame(df)
     let len = df.len
     for i in slice:
@@ -159,7 +167,7 @@ proc `[]`(df: DataFrame, slice: HSlice[int, int]): DataFrame =
             result.data[colName].add(df[colName][i])
 
 proc `[]`(df: DataFrame, indices: openArray[int]): DataFrame =
-    ## indicesの行だけ返す
+    ## indicesの行だけ返す。
     result = initDataFrame(df)
     let len = df.len
     for i in indices:
@@ -169,13 +177,13 @@ proc `[]`(df: DataFrame, indices: openArray[int]): DataFrame =
             result.data[colName].add(df[colName][i])
 
 proc iloc(df: DataFrame, i: int): Row =
-    ## index番目の行をRow形式で返す
+    ## index番目の行をRow形式で返す。
     result = initRow()
     for colName in df.columns:
         result[colName] = df.data[colName][i]
 
 proc loc(df: DataFrame, c: Cell): DataFrame =
-    ## indexの行の値がcの値と一致する行を返す
+    ## indexの行の値がcの値と一致する行を返す。
     result = initDataFrame(df)
     let columns = df.getColumnName()
     for i in 0..<df.len:
@@ -201,6 +209,29 @@ proc shape(df: DataFrame): (int,int) =
     let colNumber = df.getColumnName.len
     let rowNumber = df.len
     result = (rowNumber, colNumber)
+
+###############################################################
+proc isIntSeries(s: Series): bool =
+    result = true
+    try:
+        for c in s:
+            discard parseInt(c)
+    except:
+        result = false
+proc isFloatSeries(s: Series): bool =
+    result = true
+    try:
+        for c in s:
+            discard parseFloat(c)
+    except:
+        result = false
+proc isDatetimeSeries(s: Series, format=defaultDateTimeFormat): bool =
+    result = true
+    try:
+        for c in s:
+            discard parseDatetime(c, format)
+    except:
+        result = false
 
 ###############################################################
 proc fillEmpty[T](s: Series, fill: T): Series =
@@ -238,7 +269,7 @@ proc toDataFrame(
     indexCol="",
     encoding="utf-8"
 ): DataFrame =
-    ## テキストで表現されたデータ構造をDataFrameに変換する
+    ## テキストで表現されたデータ構造をDataFrameに変換する。
     runnableExamples:
         var df = toDataFrame(
             text=tsv,
@@ -268,14 +299,14 @@ proc toDataFrame(
         if result.getColumnName().contains(indexCol):
             result.indexCol = indexCol
         else:
-            raise newException(ValueError, fmt"not found {indexCol}")
+            raise newException(NimDataFrameError, fmt"not found {indexCol}")
     else:
         result[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<lines.len-headerRows: $i
 
 proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], indexCol=""): DataFrame =
-    ## 配列で表現されたデータ構造をDataFrameに変換する
+    ## 配列で表現されたデータ構造をDataFrameに変換する。
     runnableExamples:
         var df = toDataFrame(
             [
@@ -309,7 +340,7 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], i
                             dfEmpty
                     )
         else:
-            raise newException(ValueError, "each row.len must be lower than columns.len.")
+            raise newException(NimDataFrameError, "each row.len must be lower than columns.len.")
     #列名が指定されていない場合
     else:
         #列数は各行の長さの最大値
@@ -331,7 +362,7 @@ proc toDataFrame[T](rows: openArray[seq[T]], columns: openArray[ColName] = [], i
         if result.getColumnName().contains(indexCol):
             result.indexCol = indexCol
         else:
-            raise newException(ValueError, fmt"not found {indexCol}")
+            raise newException(NimDataFrameError, fmt"not found {indexCol}")
     else:
         result[defaultIndexName] =
             collect(newSeq):
@@ -343,7 +374,7 @@ proc toCsv(df: DataFrame, filename: string, encoding="utf-8") =
     let openOk = fp.open(filename, fmWrite)
     defer: fp.close()
     if not openOk:
-        raise newException(ValueError, fmt"{filename} open error.")
+        raise newException(NimDataFrameError, fmt"{filename} open error.")
     #
     let ec = open(encoding, "utf-8")
     defer: ec.close()
@@ -361,7 +392,7 @@ proc toCsv(df: DataFrame, filename: string, encoding="utf-8") =
 
 ###############################################################
 proc concat(dfs: openArray[DataFrame]): DataFrame =
-    ## 単純に下にDataFrameを連結し続ける
+    ## 単純に下にDataFrameを連結し続ける。
     runnableExamples:
         concat([df1, df2, df3])
     ##
@@ -388,7 +419,7 @@ proc concat(dfs: openArray[DataFrame]): DataFrame =
 
 ###############################################################
 proc `+`(a: Cell, b: float): float =
-    ## 左辺Cell型、右辺float型の加算を計算する
+    ## 左辺Cell型、右辺float型の加算を計算する。
     parseFloat(a) + b
 proc `-`(a: Cell, b: float): float =
     parseFloat(a) - b
@@ -397,7 +428,7 @@ proc `*`(a: Cell, b: float): float =
 proc `/`(a: Cell, b: float): float =
     parseFloat(a) / b
 proc `+`(a: float, b: Cell): float =
-    ## 左辺float型、右辺Cell型の加算を計算する
+    ## 左辺float型、右辺Cell型の加算を計算する。
     a + parseFloat(b)
 proc `-`(a: float, b: Cell): float =
     a - parseFloat(b)
@@ -408,7 +439,7 @@ proc `/`(a: float, b: Cell): float =
 
 #TODO: int版も作る
 proc `==`(a: Cell, b: float): bool =
-    ## 左辺Cell型、右辺float型を等価比較する
+    ## 左辺Cell型、右辺float型を等価比較する。
     result = a.parseFloat() == b
 proc `!=`(a: Cell, b: float): bool =
     result = a.parseFloat() != b
@@ -421,7 +452,7 @@ proc `>=`(a: Cell, b: float): bool =
 proc `<=`(a: Cell, b: float): bool =
     result = a.parseFloat() <= b
 proc `==`(a: float, b: Cell): bool =
-    ## 左辺float型、右辺Cell型を等価比較する
+    ## 左辺float型、右辺Cell型を等価比較する。
     result = a == b.parseFloat()
 proc `!=`(a: float, b: Cell): bool =
     result = a != b.parseFloat()
@@ -435,8 +466,8 @@ proc `<=`(a: float, b: Cell): bool =
     result = a <= b.parseFloat()
     
 proc stat(s: Series, statFn: openArray[float] -> float): Cell =
-    ## Seriesの統計量を計算する
-    ## statFnにはSeriesをfloat変換した配列の統計量を計算する関数を指定する
+    ## Seriesの統計量を計算する。
+    ## statFnにはSeriesをfloat変換した配列の統計量を計算する関数を指定する。
     runnableExamples:
         df["col1"].stat(stats.mean)
     ##
@@ -464,8 +495,8 @@ proc v(s: Series): Cell =
     s.stat(stats.variance)
 
 proc stat(df: DataFrame, statFn: Series -> Cell): DataFrame =
-    ## DataFrameの各列に対して統計量を計算する
-    ## statFnにはSeriesの統計量を計算する関数を指定する
+    ## DataFrameの各列に対して統計量を計算する。
+    ## statFnにはSeriesの統計量を計算する関数を指定する。
     runnableExamples:
         df.stat(mean)
     ##
@@ -490,8 +521,8 @@ proc v(df: DataFrame): DataFrame =
     df.stat(v)
 
 proc stat(dfg: DataFrameGroupBy, statFn: DataFrame -> DataFrame): DataFrame =
-    ## groupbyしたDataFrameに対して統計量を計算する
-    ## statFnにはDataFrameの統計量を計算する関数を指定する
+    ## groupbyしたDataFrameに対して統計量を計算する。
+    ## statFnにはDataFrameの統計量を計算する関数を指定する。
     runnableExamples:
         df.groupby(["col1","col2"]).stat(sum)
     ##
@@ -523,7 +554,7 @@ proc v(dfg: DataFrameGroupBy): DataFrame =
 
 ###############################################################
 proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
-    ## 指定のDataFrameの列を削除する
+    ## 指定のDataFrameの列を削除する。
     runnableExamples:
         df.dropColumns(["col1","col2"])
     ##
@@ -532,8 +563,8 @@ proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
     for colName in colNames:
         result.data.del(colName)
 proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): DataFrame =
-    ## DataFrameの列名を変更する
-    ## renameMapには変更前列名と変更後列名のペアを指定する
+    ## DataFrameの列名を変更する。
+    ## renameMapには変更前列名と変更後列名のペアを指定する。
     runnableExamples:
         df.renameColumns({"col1":"COL1","col2":"COL2"})
     ##
@@ -553,12 +584,15 @@ proc resetIndex(df: DataFrame): DataFrame =
                     for i in 0..<df.len: $i
         else:
             result[colName] = df[colName]
+proc setIndex(df: DataFrame, indexCol: ColName): DataFrame =
+    result = df
+    result.indexCol = indexCol
 
 ###############################################################
 proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
-    ## Seriesの各セルに対して関数fnを適用する
-    ## 関数fnにはSeriesの各セルが渡され、関数fnは文字列に変換可能な任意の型を返す
-    ## 文字列型以外の操作を関数fn内で行う場合、fromCell関数にCell型から任意の型に変換する関数を渡す
+    ## Seriesの各セルに対して関数fnを適用する。
+    ## 関数fnにはSeriesの各セルが渡され、関数fnは文字列に変換可能な任意の型を返す。
+    ## 文字列型以外の操作を関数fn内で行う場合、fromCell関数にCell型から任意の型に変換する関数を渡す。
     runnableExamples:
         let triple = proc(c: int): int = c * 3
         df["col1"].map(triple, parseInt)
@@ -570,13 +604,13 @@ proc intMap[T](s: Series, fn: int -> T): Series =
     map(s, fn, parseInt)
 proc floatMap[T](s: Series, fn: float -> T): Series =
     map(s, fn, parseFloat)
-proc timeMap[T](s: Series, fn: DateTime -> T, format=defaultTimeFormat): Series =
-    map(s, fn, genParseTime(format))
+proc datetimeMap[T](s: Series, fn: DateTime -> T, format=defaultDateTimeFormat): Series =
+    map(s, fn, genParseDatetime(format))
 
 ###############################################################
 proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
-    ## fltr関数に従ってDataFrameにフィルタをかける
-    ## fltr関数にはDataFrameの各列が渡され、fltr関数は論理値を返す
+    ## fltr関数に従ってDataFrameにフィルタをかける。
+    ## fltr関数にはDataFrameの各列が渡され、fltr関数は論理値を返す。
     runnableExamples:
         df.filter(row => row["col1"] > 1000 and 3000 > row["col2"])
     ##
@@ -588,8 +622,8 @@ proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
 
 ###############################################################
 proc sort[T](df: DataFrame, colName: ColName, fromCell: Cell -> T, ascending=true): DataFrame =
-    ## DataFrameを指定列でソートする
-    ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する
+    ## DataFrameを指定列でソートする。
+    ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する。
     ##
     result = initDataFrame(df)
     var sortSource = collect(newSeq):
@@ -613,12 +647,12 @@ proc intSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
     sort(df, colName, parseInt, ascending)
 proc floatSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
     sort(df, colName, parseFloat, ascending)
-proc timeSort(df: DataFrame, colName: ColName, format=defaultTimeFormat, ascending=true): DataFrame =
-    sort(df, colName, genParseTime(format), ascending)
+proc datetimeSort(df: DataFrame, colName: ColName, format=defaultDateTimeFormat, ascending=true): DataFrame =
+    sort(df, colName, genParseDatetime(format), ascending)
 
 ###############################################################
 proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries =
-    ## 重複した行はtrue、それ以外はfalse
+    ## 重複した行はtrue、それ以外はfalse。
     ##
     result = initFilterSeries()
     var checker = initTable[seq[string], bool]()
@@ -637,13 +671,13 @@ proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries 
             result.add(false)
             checker[row] = false
 proc dropDuplicates(df: DataFrame, colNames: openArray[ColName] = []): DataFrame =
-    ## 重複した行を消す
+    ## 重複した行を消す。
     ##
     df.drop(df.duplicated(colNames))
 
 ###############################################################
 proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
-    ## DataFrameを指定の列の値でグループ化する（戻り値はDataFrameGroupBy型）
+    ## DataFrameを指定の列の値でグループ化する（戻り値はDataFrameGroupBy型）。
     ## 
     result = initDataFrameGroupBy()
     #マルチインデックスの作成
@@ -667,8 +701,8 @@ proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
         for colName in df.columns:
             result.data[mi].data[colName].add(df[colName][i])
 proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): DataFrame =
-    ## groupbyしたDataFrameの各列に対して関数を実行する
-    ## 指定する関数に{.closure.}オプションをつけないとエラーになる
+    ## groupbyしたDataFrameの各列に対して関数を実行する。
+    ## 指定する関数に{.closure.}オプションをつけないとエラーになる。
     runnableExamples:
         proc f(series: Series): float{.closure.} =
             series.toFloat().mean()/100
@@ -689,8 +723,8 @@ proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): Data
         dfs.add(df)
     result = concat(dfs = dfs)
 proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): DataFrame =
-    ## groupby下DataFrameの各groupに対して関数を実行する
-    ## 関数はTableを返すことに注意
+    ## groupby下DataFrameの各groupに対して関数を実行する。
+    ## 関数はTableを返すことに注意。
     runnableExamples:
         proc f(df: DataFrame): Table[ColName,Cell] =
             var cell: Cell
@@ -719,21 +753,108 @@ proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): Da
     result = concat(dfs = dfs)
 
 ###############################################################
-proc resample(df: DataFrame, window: int): DataFrameResample =
+proc resample(df: DataFrame, window: int, format=defaultDateTimeFormat): DataFrameResample =
     result.data = df
     result.window = $window
-proc resample(df: DataFrame, window: string): DataFrameResample =
+    result.format = format
+proc resample(df: DataFrame, window: string, format=defaultDateTimeFormat): DataFrameResample =
     result.data = df
     result.window = window
+    result.format = format
 proc stat(dfre: DataFrameResample, statFn: Series -> Cell): DataFrame =
-    result = initDataFrame(dfre.data)
-    let w = dfre.window.parseInt()
-    for i in countup(0, dfre.data.len-1, w):
-        for colName in result.columns:
-            var slice = i..<i+w
-            if slice.b >= dfre.data.len:
-                slice.b = dfre.data.len-1
-            result.data[colName].add(statFn(dfre.data[colName][slice]))
+    result = initDataFrame()
+    #数字指定かdatetime指定か判断する
+    var matches: array[2, string]
+    if match(dfre.window, re"(\d+)([a-zA-Z]+)?", matches):
+        #数字のみ（行数指定）の場合
+        if matches[1] == "" and matches[0] != "":
+            let w = matches[0].parseInt()
+            #各行をwindow飛ばしで処理する
+            for colName in dfre.data.columns:
+                result[colName] = initSeries()
+            var index: seq[Cell] = @[]
+            for i in countup(0, dfre.data.len-1, w):
+                index.add(dfre.data[dfre.data.indexCol][i])
+                var slice = i..<i+w
+                if slice.b >= dfre.data.len:
+                    slice.b = dfre.data.len-1
+                for colName in result.columns:
+                    result.data[colName].add(statFn(dfre.data[colName][slice]))
+            result.data[dfre.data.indexCol] = index
+        #datetime範囲指定の場合
+        elif matches[1] != "" and matches[0] != "":
+            let datetimeId = matches[1]
+            let w = matches[0].parseInt()
+            #インデックスがdatetimeフォーマットに準拠している場合
+            if isDatetimeSeries(dfre.data[dfre.data.indexCol]):
+                proc genGetInterval(datetimeId: string): int -> TimeInterval =
+                    case datetimeId:
+                    of "Y": result = proc(interval:int):TimeInterval=interval.years
+                    of "m": result = proc(interval:int):TimeInterval=interval.months
+                    of "d": result = proc(interval:int):TimeInterval=interval.days
+                    of "H": result = proc(interval:int):TimeInterval=interval.hours
+                    of "M": result = proc(interval:int):TimeInterval=interval.minutes
+                    of "S": result = proc(interval:int):TimeInterval=interval.seconds
+                proc flattenDatetime(dt: DateTime, datetimeId: string): DateTime =
+                    result = dt
+                    case datetimeId:
+                    of "Y":
+                        result -= result.month.ord.months
+                        result -= result.monthday.ord.days
+                        result -= result.hour.ord.hours
+                        result -= result.minute.ord.minutes
+                        result -= result.second.ord.seconds
+                    of "m":
+                        result -= result.monthday.ord.days
+                        result -= result.hour.ord.hours
+                        result -= result.minute.ord.minutes
+                        result -= result.second.ord.seconds
+                    of "d":
+                        result -= result.hour.ord.hours
+                        result -= result.minute.ord.minutes
+                        result -= result.second.ord.seconds
+                    of "H":
+                        result -= result.minute.ord.minutes
+                        result -= result.second.ord.seconds
+                    of "M":
+                        result -= result.second.ord.seconds
+                    of "S":
+                        result = result
+                let datetimes = dfre.data[dfre.data.indexCol].toDatetime()
+                let getInterval = genGetInterval(datetimeId)
+                let startDatetime = flattenDatetime(datetimes[0], datetimeId)
+                var startIndex = 0
+                var interval = w
+                var index: seq[DateTime] = @[]
+                #DateTime型に変換したindexを上から順にみていく
+                for colName in dfre.data.columns:
+                    result[colName] = initSeries()
+                for i, dt in datetimes.pairs():
+                    #範囲外になった場合、集計
+                    if startDatetime + getInterval(interval) <= dt:
+                        var slice = startIndex..<i
+                        if slice.b >= dfre.data.len:
+                            slice.b = dfre.data.len-1
+                        for colName in result.columns:
+                            result.data[colName].add(statFn(dfre.data[colName][slice]))
+                        index.add(startDatetime + getInterval(interval-w))
+                        startIndex = i
+                        interval += w
+                result[dfre.data.indexCol] = index
+                if startIndex < dfre.data.len-1:
+                    var slice = startIndex..<dfre.data.len
+                    for colName in result.columns:
+                        result.data[colName].add(statFn(dfre.data[colName][slice]))
+                    result.data[dfre.data.indexCol].add((startDatetime + getInterval(interval-w)).parseString())
+            #インデックスがdatetimeフォーマットでない場合
+            else:
+                raise newException(NimDataFrameError, "invalid datetime format")
+        #指定フォーマットでない場合
+        else:
+            raise newException(NimDataFrameError, "invalid datetime format")
+    #指定フォーマットにひっからなかった場合（エラー）
+    else:
+        raise newException(NimDataFrameError, "invalid datetime format")
 proc count(dfre: DataFrameResample): DataFrame =
     dfre.stat(count)
 proc sum(dfre: DataFrameResample): DataFrame =
@@ -802,7 +923,7 @@ proc toBe() =
     #
     echo "map--------------------------------"
     echo df["sales"].intMap(c => c*2)
-    echo df["time"].timeMap(c => c+initDuration(hours=1))
+    echo df["time"].datetimeMap(c => c+initDuration(hours=1))
     let triple = proc(c: int): int =
         c * 3
     echo df["sales"].map(triple, parseInt)
@@ -823,7 +944,7 @@ proc toBe() =
     echo df.sort("name", ascending=false)
     echo df.sort("sales", parseInt, ascending=true)
     echo df.sort("sales", parseInt, ascending=false)
-    echo df.timeSort("time", ascending=false)
+    echo df.datetimeSort("time", ascending=false)
     #
     echo "resetIndex--------------------------------"
     echo df.intSort("sales").resetIndex()
@@ -875,6 +996,12 @@ proc toBe() =
     #
     echo "resaple mean--------------------------------"
     echo df.resample(5).mean()
+    #
+    echo "resaple 1H--------------------------------"
+    echo df.setIndex("time").resample("1H").mean()
+    #
+    echo "resaple 30M--------------------------------"
+    echo df.setIndex("time").resample("30M").mean()
     #[
     ]#
 
