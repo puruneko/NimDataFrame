@@ -670,6 +670,7 @@ proc datetimeSort(df: DataFrame, colName: ColName, format=defaultDateTimeFormat,
 ###############################################################
 proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries =
     ## 重複した行はtrue、それ以外はfalse.
+    ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス）.
     ##
     result = initFilterSeries()
     var checker = initTable[seq[string], bool]()
@@ -689,6 +690,7 @@ proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries 
             checker[row] = false
 proc dropDuplicates(df: DataFrame, colNames: openArray[ColName] = []): DataFrame =
     ## 重複した行を消す.
+    ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス）.
     ##
     df.drop(df.duplicated(colNames))
 
@@ -877,7 +879,7 @@ proc agg[T](dfre: DataFrameResample, aggFn: openArray[(ColName, Series -> T)]): 
                     result.data[dfre.data.indexCol].add((startDatetime + getInterval(interval-w)).parseString())
             #インデックスがdatetimeフォーマットでない場合
             else:
-                raise newException(NimDataFrameError, "invalid datetime format")
+                raise newException(NimDataFrameError, "index column isn't datetime format")
         #指定フォーマットでない場合
         else:
             raise newException(NimDataFrameError, "invalid datetime format")
@@ -944,7 +946,7 @@ proc agg[T](dfre: DataFrameResample, aggFn: Series -> T): DataFrame =
                     result.data[dfre.data.indexCol].add((startDatetime + getInterval(interval-w)).parseString())
             #インデックスがdatetimeフォーマットでない場合
             else:
-                raise newException(NimDataFrameError, "invalid datetime format")
+                raise newException(NimDataFrameError, "index column isn't datetime format")
         #指定フォーマットでない場合
         else:
             raise newException(NimDataFrameError, "invalid datetime format")
