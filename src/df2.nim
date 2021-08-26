@@ -31,28 +31,35 @@ type DataFrameResample = object
     window: string
     format: string
 
+
 ###############################################################
 type NimDataFrameError = object of CatchableError
 type UnimplementedError = object of CatchableError
+
 
 ###############################################################
 const dfEmpty = ""
 const defaultIndexName = "__index__"
 const defaultDateTimeFormat = "yyyy-MM-dd HH:mm:ss"
 
+
 ###############################################################
 #parse... : cellに対しての型変換
 #to...    : seriesに対しての型変換
 proc initRow(): Row =
     result = initTable[string, Cell]()
+
 proc initSeries(): Series =
     result = @[]
+
 proc initFilterSeries(): FilterSeries =
     result = @[]
+
 
 iterator columns(df: DataFrame): string =
     for key in df.data.keys:
         yield key
+
 iterator rows(df: DataFrame): Row =
     let maxRowNumber = min(
         collect(newSeq) do:
@@ -64,37 +71,49 @@ iterator rows(df: DataFrame): Row =
         for colName in df.columns:
             row[colName] = df.data[colName][i]
         yield row
+
 proc getColumnName(df: DataFrame): seq[string] =
     for column in df.columns:
         result.add(column)
+
 proc getSeries(df: DataFrame): seq[Series] =
     for value in df.data.values:
         result.add(value)
+
 proc getRows(df: DataFrame): seq[Row] =
     for row in df.rows:
         result.add(row)
 
+
 proc `$`(x: DateTime): string =
     x.format(defaultDateTimeFormat)
+
 proc parseString[T](x: T): Cell =
     $x
+
 proc parseDatetime(c: Cell, format=defaultDateTimeFormat): DateTime =
     c.parse(format)
+
 proc genParseDatetime(format=defaultDateTimeFormat): Cell -> DateTime =
     result =
         proc(c:Cell): DateTime =
             c.parseDatetime(format)
 
+
 proc to[T](s: Series, parser: Cell -> T): seq[T] =
     result = collect(newSeq):
         for c in s:
             parser(c)
+
 proc toInt(s: Series): seq[int] =
     to(s, parseInt)
+
 proc toFloat(s: Series): seq[float] =
     to(s, parseFloat)
+
 proc toDatetime(s: Series, format=defaultDateTimeFormat): seq[DateTime] =
     to(s, genParseDatetime(format))
+
 
 proc `[]`(df: DataFrame, colName: ColName): Series =
     ## DataFrameからSeriesを取り出す.
@@ -109,9 +128,11 @@ proc `[]=`[T](df: var DataFrame, colName: ColName, right: openArray[T]) {. disca
     df.data.del(colName)
     df.data.add(colName, newSeries)
 
+
 proc initDataFrame(): DataFrame =
     result.data = initTable[ColName, Series]()
     result.indexCol = defaultIndexName
+
 proc initDataFrame(df: DataFrame): DataFrame =
     result = initDataFrame()
     for colName in df.columns:
@@ -120,6 +141,7 @@ proc initDataFrame(df: DataFrame): DataFrame =
 proc initDataFrameGroupBy(): DataFrameGroupBy =
     result.data = initTable[seq[ColName], DataFrame]()
     result.columns = @[]
+
 
 proc len(df: DataFrame): int =
     result = max(
@@ -217,6 +239,7 @@ proc shape(df: DataFrame): (int,int) =
     let rowNumber = df.len
     result = (rowNumber, colNumber)
 
+
 ###############################################################
 proc isIntSeries(s: Series): bool =
     result = true
@@ -225,6 +248,7 @@ proc isIntSeries(s: Series): bool =
             discard parseInt(c)
     except:
         result = false
+
 proc isFloatSeries(s: Series): bool =
     result = true
     try:
@@ -232,6 +256,7 @@ proc isFloatSeries(s: Series): bool =
             discard parseFloat(c)
     except:
         result = false
+
 proc isDatetimeSeries(s: Series, format=defaultDateTimeFormat): bool =
     result = true
     try:
@@ -239,6 +264,7 @@ proc isDatetimeSeries(s: Series, format=defaultDateTimeFormat): bool =
             discard parseDatetime(c, format)
     except:
         result = false
+
 
 ###############################################################
 proc fillEmpty[T](s: Series, fill: T): Series =
@@ -249,6 +275,7 @@ proc fillEmpty[T](s: Series, fill: T): Series =
                     fill.parseString()
                 else:
                     c
+
 proc fillEmpty[T](df: DataFrame, fill: T): DataFrame =
     result = initDataFrame(df)
     for colName in result.columns:
@@ -266,6 +293,7 @@ proc dropEmpty(df: DataFrame): DataFrame =
             continue
         for colName in df.columns:
             result.data[colName].add(df[colName][i])
+
 
 ###############################################################
 proc toDataFrame(
@@ -375,6 +403,7 @@ proc toDataFrame[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], 
             collect(newSeq):
                 for i in 0..<rows.len: $i
 
+
 ###############################################################
 proc toCsv(df: DataFrame): string =
     result = ""
@@ -387,6 +416,7 @@ proc toCsv(df: DataFrame): string =
         for colName in df.columns:
             line &= df[colName][i] & ","
         result &= line[0..<line.len-1] & "\n"
+
 proc toCsv(df: DataFrame, filename: string, encoding="utf-8") =
     var fp: File
     let openOk = fp.open(filename, fmWrite)
@@ -397,6 +427,7 @@ proc toCsv(df: DataFrame, filename: string, encoding="utf-8") =
     let ec = open(encoding, "utf-8")
     defer: ec.close()
     fp.write(ec.convert(df.toCsv()))
+
 
 ###############################################################
 proc concat(dfs: openArray[DataFrame]): DataFrame =
@@ -433,12 +464,17 @@ proc indexOf[T](s: openArray[T], key: T): int =
         if x == key:
             result = i
             break
+
 proc indicesOf[T](s: openArray[T], key: T): seq[int] =
     result = @[]
     for i, x in s.pairs():
         if x == key:
             result.add(i)
+
 proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"): DataFrame =
+    ## df1とdf2をマージする
+    ## 
+
     result = initDataFrame()
     if how == "inner":
         #on列が存在する場合
@@ -446,7 +482,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
             toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
             #resultの初期化・重複列の処理
             var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
-            let intersectionCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            let duplicatedCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
             var columnsTable1 = 
                 collect(initTable()):
                     for colName in df1.columns:
@@ -456,8 +492,8 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                     for colName in df2.columns:
                         {colName: colName}
             let columns1 = toHashSet(df1.getColumnName())
-            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + intersectionCols
-            for colName in intersectionCols:
+            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + duplicatedCols
+            for colName in duplicatedCols:
                 colNames.del(colNames.indexOf(colName))
                 colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
                 columnsTable1[colName] = fmt"{colName}_1"
@@ -496,7 +532,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
             toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
             #resultの初期化・重複列の処理
             var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
-            let intersectionCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            let duplicatedCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
             var columnsTable1 = 
                 collect(initTable()):
                     for colName in df1.columns:
@@ -506,8 +542,8 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                     for colName in df2.columns:
                         {colName: colName}
             let columns1 = toHashSet(df1.getColumnName())
-            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + intersectionCols
-            for colName in intersectionCols:
+            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + duplicatedCols
+            for colName in duplicatedCols:
                 colNames.del(colNames.indexOf(colName))
                 colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
                 columnsTable1[colName] = fmt"{colName}_1"
@@ -553,7 +589,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
             toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
             #resultの初期化・重複列の処理
             var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
-            let intersectionCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            let duplicatedCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
             var columnsTable1 = 
                 collect(initTable()):
                     for colName in df1.columns:
@@ -563,8 +599,8 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                     for colName in df2.columns:
                         {colName: colName}
             let columns2 = toHashSet(df2.getColumnName())
-            let columns1 = (toHashSet(df1.getColumnName()) - columns2) + intersectionCols
-            for colName in intersectionCols:
+            let columns1 = (toHashSet(df1.getColumnName()) - columns2) + duplicatedCols
+            for colName in duplicatedCols:
                 colNames.del(colNames.indexOf(colName))
                 colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
                 columnsTable1[colName] = fmt"{colName}_1"
@@ -610,7 +646,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
             toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
             #resultの初期化・重複列の処理
             var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
-            let intersectionCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            let duplicatedCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
             var columnsTable1 = 
                 collect(initTable()):
                     for colName in df1.columns:
@@ -620,8 +656,8 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                     for colName in df2.columns:
                         {colName: colName}
             let columns1 = toHashSet(df1.getColumnName())
-            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + intersectionCols
-            for colName in intersectionCols:
+            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + duplicatedCols
+            for colName in duplicatedCols:
                 colNames.del(colNames.indexOf(colName))
                 colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
                 columnsTable1[colName] = fmt"{colName}_1"
@@ -672,50 +708,12 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                     else:
                         raise newException(NimDataFrameError, "unknown error")
         else:
-            raise newException(NimDataFrameError, fmt"column '{on}' not found")
+            raise newException(NimDataFrameError, fmt"common column '{on}' not found")
     else:
         raise newException(NimDataFrameError, fmt"invalid method '{how}'")
 proc merge(df1: DataFrame, df2: DataFrame, on: ColName, how="inner"): DataFrame =
     merge(df1, df2, [on], how)
 
-proc merge2(df1: DataFrame, df2: DataFrame, on: ColName, how="inner"): DataFrame =
-    result = initDataFrame()
-    if how == "inner":
-        #on列が存在する場合
-        if df1.data.contains(on) and df2.data.contains(on):
-            #resultの初期化・重複列の処理
-            var colNames = (toHashSet(df1.getColumnName) + toHashSet(df2.getColumnName)).toSeq()
-            let intersectionCols = (toHashSet(df1.getColumnName) * toHashSet(df2.getColumnName)).toSeq()
-            var columns1 = 
-                collect(initTable()):
-                    for colName in df1.columns:
-                        {colName: colName}
-            var columns2 = 
-                collect(initTable()):
-                    for colName in df2.columns:
-                        {colName: colName}
-            for colName in intersectionCols:
-                if colName == on:
-                    continue
-                colNames.del(colNames.indexOf(colName))
-                colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
-                columns1[colName] = fmt"{colName}_1"
-                columns2[colName] = fmt"{colName}_2"
-            for colName in colNames:
-                result[colName] = initSeries()
-            #on列の共通部分の計算
-            let adoptedOn = toHashSet(df1[on]) * toHashsET(df2[on])
-            #共通部分を含むindexを抜き出し、その行の値を追加していく
-            for c in adoptedOn:
-                for index1 in df1[on].indicesOf(c):
-                    for index2 in df2[on].indicesOf(c):
-                        for colName in df1.columns:
-                            result.data[columns1[colName]].add(df1[colName][index1])
-                        for colName in df2.columns:
-                            if colName != on:
-                                result.data[columns2[colName]].add(df2[colName][index2])
-        else:
-            raise newException(NimDataFrameError, fmt"column '{on}' not found")
 
 ###############################################################
 proc `+`(a: Cell, b: float): float =
@@ -780,6 +778,7 @@ proc agg[T](s: Series, aggFn: Series -> T): Cell =
         result = aggFn(s).parseString()
     except:
         result = dfEmpty  
+
 proc aggMath(s: Series, aggFn: openArray[float] -> float): Cell =
     ## Seriesの統計量を計算する.
     ## aggFnにはSeriesをfloat変換した配列の統計量を計算する関数を指定する.
@@ -792,6 +791,7 @@ proc aggMath(s: Series, aggFn: openArray[float] -> float): Cell =
         result = aggFn(f).parseString()
     except:
         result = dfEmpty
+
 proc count(s: Series): Cell =
     let cnt = proc(s: openArray[float]): float =
         float(s.len)
@@ -820,6 +820,7 @@ proc agg[T](df: DataFrame, aggFn: Series -> T): DataFrame =
     for (colName, s) in df.data.pairs():
         let c = aggFn(s)
         result[colName] = @[c.parseString()]
+
 proc count(df: DataFrame): DataFrame =
     df.agg(count)
 proc sum(df: DataFrame): DataFrame =
@@ -835,6 +836,7 @@ proc min(df: DataFrame): DataFrame =
 proc v(df: DataFrame): DataFrame =
     df.agg(v)
 
+
 ###############################################################
 proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
     ## 指定のDataFrameの列を削除する.
@@ -845,6 +847,7 @@ proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
     result = df
     for colName in colNames:
         result.data.del(colName)
+
 proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): DataFrame =
     ## DataFrameの列名を変更する.
     ## renameMapには変更前列名と変更後列名のペアを指定する.
@@ -858,6 +861,7 @@ proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): Data
             result[renamePair[1]] = result[renamePair[0]]
             result.data.del(renamePair[0])
 
+
 proc resetIndex(df: DataFrame): DataFrame =
     result = initDataFrame(df)
     for colName in df.columns:
@@ -867,9 +871,11 @@ proc resetIndex(df: DataFrame): DataFrame =
                     for i in 0..<df.len: $i
         else:
             result[colName] = df[colName]
+
 proc setIndex(df: DataFrame, indexCol: ColName): DataFrame =
     result = df
     result.indexCol = indexCol
+
 
 ###############################################################
 proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
@@ -883,12 +889,14 @@ proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
 
     for c in s:
         result.add(fn(fromCell(c)).parseString())
+
 proc intMap[T](s: Series, fn: int -> T): Series =
     map(s, fn, parseInt)
 proc floatMap[T](s: Series, fn: float -> T): Series =
     map(s, fn, parseFloat)
 proc datetimeMap[T](s: Series, fn: DateTime -> T, format=defaultDateTimeFormat): Series =
     map(s, fn, genParseDatetime(format))
+
 
 ###############################################################
 proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
@@ -902,6 +910,7 @@ proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
     for row in df.rows:
         fs.add(fltr(row))
     result = df[fs]
+
 
 ###############################################################
 proc sort[T](df: DataFrame, colName: ColName, fromCell: Cell -> T, ascending=true): DataFrame =
@@ -923,10 +932,12 @@ proc sort[T](df: DataFrame, colName: ColName, fromCell: Cell -> T, ascending=tru
     for sorted in sortSource:
         for colName in df.columns:
             result.data[colName].add(df.data[colName][sorted[0]])
+
 proc sort[T](df: DataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): DataFrame =
     result = df.deepCopy()
     for colName in reversed(colNames):
         result = result.sort(colName, fromCell, ascending)
+
 proc sort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
     let f = proc(c: Cell): Cell = c
     sort(df, colName, f, ascending)
@@ -934,24 +945,28 @@ proc sort(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFram
     result = df.deepCopy()
     for colName in reversed(colNames):
         result = result.sort(colName, ascending)
+
 proc intSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
     sort(df, colName, parseInt, ascending)
 proc intSort(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.intSort(colName, ascending)
+
 proc floatSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
     sort(df, colName, parseFloat, ascending)
 proc floatSort(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.floatSort(colName, ascending)
+
 proc datetimeSort(df: DataFrame, colName: ColName, format=defaultDateTimeFormat, ascending=true): DataFrame =
     sort(df, colName, genParseDatetime(format), ascending)
 proc datetimeSort(df: DataFrame, colNames: openArray[ColName], format=defaultDateTimeFormat, ascending=true): DataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.datetimeSort(colName, format, ascending)
+
 
 ###############################################################
 proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries =
@@ -974,11 +989,13 @@ proc duplicated(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries 
         else:
             result.add(false)
             checker[row] = false
+
 proc dropDuplicates(df: DataFrame, colNames: openArray[ColName] = []): DataFrame =
     ## 重複した行を消す.
     ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス）.
     ##
     df.drop(df.duplicated(colNames))
+
 
 ###############################################################
 proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
@@ -1006,6 +1023,7 @@ proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
                     df[specifiedColName][i]
         for colName in df.columns:
             result.data[mi].data[colName].add(df[colName][i])
+
 proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): DataFrame =
     ## groupbyしたDataFrameの指定列に対して関数を実行する.
     ## 指定する関数に{.closure.}オプションをつけないとエラーになる.
@@ -1029,6 +1047,7 @@ proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): Data
             df[colName] = @[colValue]
         dfs.add(df)
     result = concat(dfs = dfs)
+
 proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> DataFrame): DataFrame =
     ## groupbyしたDataFrameに対して統計量を計算する.
     ## aggFnにはDataFrameの統計量を計算する関数を指定する.
@@ -1046,6 +1065,7 @@ proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> DataFrame): DataFrame =
             df[colName] = @[colValue]
         dfs.add(df)
     result = concat(dfs = dfs)
+
 proc count(dfg: DataFrameGroupBy): DataFrame =
     dfg.agg(count)
 proc sum(dfg: DataFrameGroupBy): DataFrame =
@@ -1060,6 +1080,7 @@ proc min(dfg: DataFrameGroupBy): DataFrame =
     dfg.agg(min)
 proc v(dfg: DataFrameGroupBy): DataFrame =
     dfg.agg(v)
+
 proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): DataFrame =
     ## groupby下DataFrameの各groupに対して関数を実行する.
     ## applyFn関数はTableを返すことに注意.
@@ -1091,15 +1112,21 @@ proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): Da
         dfs.add(df)
     result = concat(dfs = dfs)
 
+
 ###############################################################
 proc resample(df: DataFrame, window: int, format=defaultDateTimeFormat): DataFrameResample =
+    ## DataFrameを指定の行数でリサンプルする（戻り値はDataFrameResample型）.
+    ##
+
     result.data = df
     result.window = $window
     result.format = format
+
 proc resample(df: DataFrame, window: string, format=defaultDateTimeFormat): DataFrameResample =
     result.data = df
     result.window = window
     result.format = format
+
 proc genGetInterval(datetimeId: string): int -> TimeInterval =
         case datetimeId:
         of "Y": result = proc(interval:int):TimeInterval=interval.years
@@ -1108,6 +1135,7 @@ proc genGetInterval(datetimeId: string): int -> TimeInterval =
         of "H": result = proc(interval:int):TimeInterval=interval.hours
         of "M": result = proc(interval:int):TimeInterval=interval.minutes
         of "S": result = proc(interval:int):TimeInterval=interval.seconds
+
 proc flattenDatetime(dt: DateTime, datetimeId: string): DateTime =
     result = dt
     case datetimeId:
@@ -1133,6 +1161,7 @@ proc flattenDatetime(dt: DateTime, datetimeId: string): DateTime =
         result -= result.second.ord.seconds
     of "S":
         result = result
+
 template resampleAggTemplate(body: untyped): untyped{.dirty.} =
     result = initDataFrame()
     #数字指定かdatetime指定か判断する
@@ -1216,13 +1245,28 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
         raise newException(NimDataFrameError, "invalid datetime format")
 
 proc agg[T](dfre: DataFrameResample, fn: openArray[(ColName, Series -> T)]): DataFrame =
+    ## リサンプルされたDataFrameの各グループの指定列に対して関数fnを適用する
+    ## 指定する関数に{.closure.}オプションをつけないとエラーになる.
+    runnableExamples:
+        proc f(s: Series): float{.closure.} =
+            sum(s)*100
+        df.resample("30M").agg({"sales": f})
+    ##
+
     resampleAggTemplate:
         for (colName, f) in fn:
             result.data[colName].add(f(dfre.data[colName][slice]).parseString())
+
 proc agg[T](dfre: DataFrameResample, fn: Series -> T): DataFrame =
+    ## リサンプルされたDataFrameの各グループの全列に対して関数fnを適用する
+    runnableExamples:
+        df.resample("30M").agg(mean)
+    ##
+
     resampleAggTemplate:
         for colName in result.columns:
             result.data[colName].add(fn(dfre.data[colName][slice]).parseString())
+
 proc count(dfre: DataFrameResample): DataFrame =
     dfre.agg(count)
 proc sum(dfre: DataFrameResample): DataFrame =
@@ -1237,7 +1281,23 @@ proc min(dfre: DataFrameResample): DataFrame =
     dfre.agg(min)
 proc v(dfre: DataFrameResample): DataFrame =
     dfre.agg(v)
+
 proc apply[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): DataFrame =
+    ## リサンプルされたDataFrameの各グループのDataFrameに対して関数fnを適用する
+    ## 関数fnはTableを返すことに注意.
+    runnableExamples:
+        proc f(df: DataFrame): Table[ColName,Cell] =
+            var cell: Cell
+            if df["col2"][0] == "abc":
+                cell = df["col3"].intMap(c => c/10).mean()
+            else:
+                cell = df["col3"].intMap(c => c*10).mean()
+            result = {
+                "col3_changed": cell
+            }.toTable()
+        df.resample("30M").apply(f)
+    ##
+
     resampleAggTemplate:
         #applyFnに渡すDataFrame作成
         var df1 = initDataFrame(dfre.data)
@@ -1251,6 +1311,7 @@ proc apply[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): DataF
         for (colName, c) in applyTable.pairs():
             df2[colName] = @[c.parseString()]
         dfs.add(df2)
+
 
 ###############################################################
 ###############################################################
