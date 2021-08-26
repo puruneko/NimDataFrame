@@ -479,7 +479,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                         for colName in on:
                             row.add(df2[colName][i])
                         row
-            let adoptedOn = toHashSet(df1on) * toHashsET(df2on)
+            let adoptedOn = toHashSet(df1on) * toHashSet(df2on)
             #共通部分を含むindexを抜き出し、その行の値を追加していく
             for c in adoptedOn:
                 for index1 in df1on.indicesOf(c):
@@ -524,7 +524,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                         row
             let df2on =
                 collect(newSeq):
-                    for i in 0..<df1.len:
+                    for i in 0..<df2.len:
                         var row: seq[Cell] = @[]
                         for colName in on:
                             row.add(df2[colName][i])
@@ -547,6 +547,134 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                             result.data[columnsTable2[colName]].add(dfEmpty)
         else:
             raise newException(NimDataFrameError, fmt"column '{on}' not found")
+    elif how == "right":
+        #on列が存在する場合
+        if toHashSet(df1.getColumnName())*toHashSet(on) == toHashSet(on) and
+            toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
+            #resultの初期化・重複列の処理
+            var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
+            let intersectionCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            var columnsTable1 = 
+                collect(initTable()):
+                    for colName in df1.columns:
+                        {colName: colName}
+            var columnsTable2 = 
+                collect(initTable()):
+                    for colName in df2.columns:
+                        {colName: colName}
+            let columns2 = toHashSet(df2.getColumnName())
+            let columns1 = (toHashSet(df1.getColumnName()) - columns2) + intersectionCols
+            for colName in intersectionCols:
+                colNames.del(colNames.indexOf(colName))
+                colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
+                columnsTable1[colName] = fmt"{colName}_1"
+                columnsTable2[colName] = fmt"{colName}_2"
+            for colName in colNames:
+                result[colName] = initSeries()
+            #df2のon列の計算
+            let df1on =
+                collect(newSeq):
+                    for i in 0..<df1.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df1[colName][i])
+                        row
+            let df2on =
+                collect(newSeq):
+                    for i in 0..<df2.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df2[colName][i])
+                        row
+            let adoptedOn = toHashSet(df2on)
+            #共通部分を含むindexを抜き出し、その行の値を追加していく
+            for c in adoptedOn:
+                for index2 in df2on.indicesOf(c):
+                    let indices1 = df1on.indicesOf(c)
+                    if indices1.len != 0:
+                        for index1 in indices1:
+                            for colName in columns2:
+                                result.data[columnsTable2[colName]].add(df2[colName][index2])
+                            for colName in columns1:
+                                result.data[columnsTable1[colName]].add(df1[colName][index1])
+                    else:
+                        for colName in columns2:
+                            result.data[columnsTable2[colName]].add(df2[colName][index2])
+                        for colName in columns1:
+                            result.data[columnsTable1[colName]].add(dfEmpty)
+        else:
+            raise newException(NimDataFrameError, fmt"column '{on}' not found")
+    elif how == "outer":
+        #on列が存在する場合
+        if toHashSet(df1.getColumnName())*toHashSet(on) == toHashSet(on) and
+            toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
+            #resultの初期化・重複列の処理
+            var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
+            let intersectionCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            var columnsTable1 = 
+                collect(initTable()):
+                    for colName in df1.columns:
+                        {colName: colName}
+            var columnsTable2 = 
+                collect(initTable()):
+                    for colName in df2.columns:
+                        {colName: colName}
+            let columns1 = toHashSet(df1.getColumnName())
+            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + intersectionCols
+            for colName in intersectionCols:
+                colNames.del(colNames.indexOf(colName))
+                colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
+                columnsTable1[colName] = fmt"{colName}_1"
+                columnsTable2[colName] = fmt"{colName}_2"
+            for colName in colNames:
+                result[colName] = initSeries()
+            #on列の和集合の計算
+            let df1on =
+                collect(newSeq):
+                    for i in 0..<df1.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df1[colName][i])
+                        row
+            let df2on =
+                collect(newSeq):
+                    for i in 0..<df2.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df2[colName][i])
+                        row
+            let adoptedOn = toHashSet(df1on) + toHashsET(df2on)
+            #共通部分を含むindexを抜き出し、その行の値を追加していく
+            for c in adoptedOn:
+                let indices1 = df1on.indicesOf(c)
+                if indices1.len != 0:
+                    for index1 in indices1:
+                        let indices2 = df2on.indicesOf(c)
+                        if indices2.len != 0:
+                            for index2 in indices2:
+                                for colName in columns1:
+                                    result.data[columnsTable1[colName]].add(df1[colName][index1])
+                                for colName in columns2:
+                                    result.data[columnsTable2[colName]].add(df2[colName][index2])
+                        else:
+                            for colName in columns1:
+                                result.data[columnsTable1[colName]].add(df1[colName][index1])
+                            for colName in columns2:
+                                result.data[columnsTable2[colName]].add(dfEmpty)
+                else:
+                    let indices2 = df2on.indicesOf(c)
+                    if indices2.len != 0:
+                        for index2 in indices2:
+                            for colName in columns2 + toHashSet(on):
+                                result.data[columnsTable2[colName]].add(df2[colName][index2])
+                            for colName in columns1 - toHashSet(on):
+                                result.data[columnsTable1[colName]].add(dfEmpty)
+                    else:
+                        raise newException(NimDataFrameError, "unknown error")
+        else:
+            raise newException(NimDataFrameError, fmt"column '{on}' not found")
+    else:
+        raise newException(NimDataFrameError, fmt"invalid method '{how}'")
 proc merge(df1: DataFrame, df2: DataFrame, on: ColName, how="inner"): DataFrame =
     merge(df1, df2, [on], how)
 
@@ -1305,6 +1433,18 @@ proc toBe() =
     #
     echo "merge left(2)--------------------------------"
     echo merge(df_ab, df_ac2, on=["a","b"], how="left").sort(["a","b"])
+    #
+    echo "merge right(1)--------------------------------"
+    echo merge(df_ab, df_ac, on="a", how="right").sort(["a","b"])
+    #
+    echo "merge right(2)--------------------------------"
+    echo merge(df_ab, df_ac2, on=["a","b"], how="right").sort(["a","b"])
+    #
+    echo "merge outer(1)--------------------------------"
+    echo merge(df_ab, df_ac, on="a", how="outer").sort(["a","b"])
+    #
+    echo "merge outer(2)--------------------------------"
+    echo merge(df_ab, df_ac2, on=["a","b"], how="outer").sort(["a","b"])
     #[
     ]#
 
