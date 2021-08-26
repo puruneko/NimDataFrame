@@ -15,4 +15,9 @@ var matches: array[2, string]
 echo match(a, re"(\d+)([a-zA-Z]+)?", matches)
 echo matches
 
-echo high(int)
+var b = {"a":1,"b":3}.toTable()
+b["a"] = 2
+echo b
+echo b["a"]
+
+echo toHashSet([1,2,3,4]) - toHashSet([2,3,5])
