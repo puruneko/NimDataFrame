@@ -10,6 +10,14 @@ df1 = pd.DataFrame({
 print(df1)
 
 print('----------------------------------')
+df1_1 = pd.DataFrame({
+    "a": [1,2,3],
+    "b": [-1,2,4],
+    "c": [7,14,21],
+}).set_index("a")
+print(df1)
+
+print('----------------------------------')
 df2 = pd.DataFrame({
     "a": [1,2,4],
     "b": [3,6,8],
@@ -34,10 +42,12 @@ df4 = pd.DataFrame({
 print(df3)
 
 
-print('merge inner----------------------------------')
+print('merge inner(1)----------------------------------')
 print(df1.merge(df2, how="inner", on="b"))
-print('merge inner----------------------------------')
-print(df1.merge(df2, how="inner", left_on="b", right_on="a"))
+print('merge inner(2)----------------------------------')
+print(df1.merge(df2, how="inner", on="b"))
+print('merge inner(3)----------------------------------')
+print(df1.merge(df1_1, how="inner", left_on="b", right_on="a"))
 
 print('join inner----------------------------------')
 print(df1.join(df2, how="inner", lsuffix='_0',rsuffix='_1'))

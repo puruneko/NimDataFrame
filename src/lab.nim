@@ -7,6 +7,7 @@ import tables
 import times
 import sets
 import re
+import math
 
 
 var a = "1H"
@@ -21,3 +22,5 @@ echo b
 echo b["a"]
 
 echo toHashSet([1,2,3,4]) - toHashSet([2,3,5])
+
+echo false.ord
