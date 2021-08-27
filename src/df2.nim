@@ -114,6 +114,11 @@ proc toFloat(s: Series): seq[float] =
 proc toDatetime(s: Series, format=defaultDateTimeFormat): seq[DateTime] =
     to(s, genParseDatetime(format))
 
+proc toString[T](arr: openArray[T]): Series =
+    result = initSeries()
+    for a in arr:
+        result.add(a.parseString())
+
 
 proc `[]`(df: DataFrame, colName: ColName): Series =
     ## DataFrameからSeriesを取り出す.
@@ -405,14 +410,14 @@ proc toDataFrame[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], 
                 for i in 0..<rows.len: $i
         result.indexCol = defaultIndexName
 
-proc toDataFrame(columns: openArray[(ColName, Series)], indexCol="" ): DataFrame =
+proc toDataFrame[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataFrame =
     result = initDataFrame()
     var c: seq[ColName] = @[]
     var l: seq[int] = @[]
     #代入
     for (colName, s) in columns:
         result[colName] = initSeries()
-        for c in s:
+        for c in s.toString():
             result.data[colName].add(c)
         c.add(colName)
         l.add(s.len)
@@ -646,138 +651,22 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
     else:
         raise newException(NimDataFrameError, fmt"invalid method '{how}'")
 
+proc merge(left: DataFrame, right: DataFrame, leftOn: ColName, rightOn: ColName, how="inner"): DataFrame =
+    merge(left, right, @[leftOn], @[rightOn], how)
+
 proc merge(left: DataFrame, right: DataFrame, on: openArray[ColName], how="inner"): DataFrame =
     merge(left, right, on, on, how)
 
 proc merge(left: DataFrame, right: DataFrame, on: ColName, how="inner"): DataFrame =
     merge(left, right, @[on], @[on], how)
 
-proc join(dfSource: DataFrame, dfArray: openArray[DataFrame], how="left"): DataFrame =
-    ## dfSourceとdfsをマージする
-    ## 
+proc join(dfSource: DataFrame, dfs: openArray[DataFrame], how="left"): DataFrame =
+    result = dfSource.deepCopy()
+    for i in 0..<dfs.len:
+        result = merge(result, dfs[i], result.indexCol, dfs[i].indexCol, how)
 
-    result = initDataFrame()
-    result.indexCol = dfSource.indexCol
-    let dfs = concat(@[dfSource], dfArray.toSeq())
-    if how == "inner":
-        #resultの初期化・重複列の処理
-        var colNames = toHashSet(dfs[0].getColumnName())
-        for df in dfs[1..^1]:
-            colNames = colNames + toHashSet(df.getColumnName())
-        var colNamesSeq = colNames.toSeq()
-        var columnsTable: seq[Table[ColName,ColName]] = @[]
-        for df in dfs:
-            columnsTable.add(
-                collect(initTable()) do:
-                    for colName in df.columns:
-                        {colName: colName}
-            )
-        for i in 0..<dfs.len:
-            for j in i+1..<dfs.len:
-                let dup = (toHashSet(dfs[i].getColumnName()) * toHashSet(dfs[j].getColumnName())) - toHashSet([dfs[i].indexCol, dfs[j].indexCol])
-                for colName in dup:
-                    colNamesSeq.del(colNamesSeq.indexOf(colName))
-                    colNamesSeq = concat(colNamesSeq, @[fmt"{colName}_{i}", fmt"{colName}_{j}"])
-                    columnsTable[i][colName] = fmt"{colName}_{i}"
-                    columnsTable[j][colName] = fmt"{colName}_{j}"
-        colNames = toHashSet(colNamesSeq)
-        for colName in colNames:
-            result[colName] = initSeries()
-        #on列の共通部分の計算
-        var dfIndex: seq[seq[Cell]] = @[]
-        for df in dfs:
-            dfIndex.add(
-                collect(newSeq) do:
-                    for i in 0..<df.len:
-                        df[df.indexCol][i]
-            )
-        var adoptedIndex = toHashSet(dfIndex[0])
-        for i in 1..<dfs.len:
-            adoptedIndex = adoptedIndex * toHashSet(dfIndex[i])
-        #共通部分を含むindexを抜き出し、その行の値を追加していく
-        proc addValue(res: var DataFrame, c: ColName, dfs: seq[DataFrame], dfIndex: seq[seq[Cell]], columnsTable: seq[Table[ColName,ColName]], indices: seq[int] = @[], i = 0) =
-            if i < dfs.len:
-                let localIndices = dfIndex[i].indicesOf(c)
-                if localIndices.len != 0:
-                    for index in localIndices:
-                        addValue(res, c, dfs, dfIndex, columnsTable, concat(indices, @[index]), i+1)
-                else:
-                    addValue(res, c, dfs, dfIndex, columnsTable, concat(indices, @[-1]), i+1)
-            else:
-                res.data[res.indexCol].add(dfs[0][dfs[0].indexCol][indices[0]])
-                for j, df in dfs.pairs():
-                    for colName in df.getColumnName():
-                        if colName == df.indexCol:
-                            continue
-                        if indices[j] != -1:
-                            res.data[columnsTable[j][colName]].add(df[colName][indices[j]])
-                        else:
-                            res.data[columnsTable[j][colName]].add(dfEmpty)
-
-        for c in adoptedIndex:
-            addValue(result, c, dfs, dfIndex, columnsTable)
-    elif how == "left":
-        #resultの初期化・重複列の処理
-        var colNames = toHashSet(dfs[0].getColumnName())
-        for df in dfs[1..^1]:
-            colNames = colNames + toHashSet(df.getColumnName())
-        var colNamesSeq = colNames.toSeq()
-        var columnsTable: seq[Table[ColName,ColName]] = @[]
-        for df in dfs:
-            columnsTable.add(
-                collect(initTable()) do:
-                    for colName in df.columns:
-                        {colName: colName}
-            )
-        for i in 0..<dfs.len:
-            for j in i+1..<dfs.len:
-                let dup = (toHashSet(dfs[i].getColumnName()) * toHashSet(dfs[j].getColumnName())) - toHashSet([dfs[i].indexCol, dfs[j].indexCol])
-                for colName in dup:
-                    colNamesSeq.del(colNamesSeq.indexOf(colName))
-                    colNamesSeq = concat(colNamesSeq, @[fmt"{colName}_{i}", fmt"{colName}_{j}"])
-                    columnsTable[i][colName] = fmt"{colName}_{i}"
-                    columnsTable[j][colName] = fmt"{colName}_{j}"
-        colNames = toHashSet(colNamesSeq)
-        for colName in colNames:
-            result[colName] = initSeries()
-        #on列の共通部分の計算
-        var dfIndex: seq[seq[Cell]] = @[]
-        for df in dfs:
-            dfIndex.add(
-                collect(newSeq) do:
-                    for i in 0..<df.len:
-                        df[df.indexCol][i]
-            )
-        var adoptedIndex = toHashSet(dfIndex[0])
-        #[
-        for i in 1..<dfs.len:
-            adoptedIndex = adoptedIndex * toHashSet(dfIndex[i])
-        ]#
-        #共通部分を含むindexを抜き出し、その行の値を追加していく
-        proc addValue(res: var DataFrame, c: ColName, dfs: seq[DataFrame], dfIndex: seq[seq[Cell]], columnsTable: seq[Table[ColName,ColName]], indices: seq[int] = @[], i = 0) =
-            if i < dfs.len:
-                let localIndices = dfIndex[i].indicesOf(c)
-                if localIndices.len != 0:
-                    for index in localIndices:
-                        addValue(res, c, dfs, dfIndex, columnsTable, concat(indices, @[index]), i+1)
-                else:
-                    addValue(res, c, dfs, dfIndex, columnsTable, concat(indices, @[-1]), i+1)
-            else:
-                res.data[res.indexCol].add(dfs[0][dfs[0].indexCol][indices[0]])
-                for j, df in dfs.pairs():
-                    for colName in df.getColumnName():
-                        if colName == df.indexCol:
-                            continue
-                        if indices[j] != -1:
-                            res.data[columnsTable[j][colName]].add(df[colName][indices[j]])
-                        else:
-                            res.data[columnsTable[j][colName]].add(dfEmpty)
-
-        for c in adoptedIndex:
-            addValue(result, c, dfs, dfIndex, columnsTable)
-    else:
-        raise newException(NimDataFrameError, fmt"invalid method '{how}'")
-
+proc join(dfSource: DataFrame, df: DataFrame, how="left"): DataFrame =
+    join(dfSource, @[df], how)
 
 ###############################################################
 proc `+`(a: Cell, b: float): float =
@@ -1572,26 +1461,79 @@ proc toBe() =
     )
     merge(df_ab, df_ac3, left_on=["a"], right_on=["a_"], how="inner").sort(["a_","b"]).show(true)
     #
-    echo "merge2 left(1)################################"
+    echo "merge left(1)################################"
     merge(df_ab, df_ac, left_on=["a"], right_on=["a"], how="left").sort(["a","b"]).show(true)
     #
-    echo "merge2 left(2)################################"
+    echo "merge left(2)################################"
     merge(df_ac3, df_ab, left_on=["a_"], right_on=["a"], how="left").sort(["a_","b"]).show(true)
     #
-    echo "merge2 left(3)################################"
+    echo "merge left(3)################################"
     merge(df_ab, df_ac3, left_on=["a"], right_on=["a_"], how="left").sort(["a_","b"]).show(true)
     #
-    echo "merge2 right(1)################################"
+    echo "merge right(1)################################"
     merge(df_ab, df_ac, left_on=["a"], right_on=["a"], how="right").sort(["a","b"]).show(true)
     #
-    echo "merge2 right(2)################################"
+    echo "merge right(2)################################"
     merge(df_ac3, df_ab, left_on=["a_"], right_on=["a"], how="right").sort(["a_","b"]).show(true)
     #
-    echo "merge2 outer(1)################################"
+    echo "merge outer(1)################################"
     merge(df_ab, df_ac, left_on=["a"], right_on=["a"], how="outer").sort(["a","b"]).show(true)
     #
-    echo "merge2 outer(2)################################"
+    echo "merge outer(2)################################"
     merge(df_ac3, df_ab, left_on=["a_"], right_on=["a"], how="outer").sort(["a_","b"]).show(true)
+    #
+    echo "join left(1)################################"
+    var df_j1 = toDataFrame(
+        columns = {
+            "a": @[1,2,3,4,5],
+            "b": @[10,20,30,40,50],
+            "c": @[100,200,300,400,500],
+        },
+        indexCol="a"
+    )
+    var df_j2 = toDataFrame(
+        columns = {
+            "a": @[1,2,3],
+            "d": @[1000,2000,3000],
+        },
+        indexCol="a"
+    )
+    var df_j3 = toDataFrame(
+        columns = {
+            "a": @[1,2],
+            "e": @[10000,20000],
+        },
+        indexCol="a"
+    )
+    var df_j4 = toDataFrame(
+        columns = {
+            "a": @[1,6,7],
+            "c": @[600,700,800],
+        },
+        indexCol="a"
+    )
+    join(df_j1, [df_j2, df_j3]).sort("a").show(true)
+    #
+    echo "join inner(1)################################"
+    join(df_j1, [df_j2, df_j3], how="inner").sort("a").show(true)
+    #
+    echo "join outer(1)################################"
+    join(df_j1, [df_j2, df_j3], how="outer").sort("a").show(true)
+    #
+    echo "join right(1)################################"
+    join(df_j1, [df_j2, df_j3], how="right").sort("a").show(true)
+    #
+    echo "join left(2)################################"
+    join(df_j1, [df_j2, df_j4], how="left").sort("a").show(true)
+    #
+    echo "join inner(2)################################"
+    join(df_j1, [df_j2, df_j4], how="inner").sort("a").show(true)
+    #
+    echo "join outer(2)################################"
+    join(df_j1, [df_j2, df_j4], how="outer").sort("a").show(true)
+    #
+    echo "join right(2)################################"
+    join(df_j1, [df_j2, df_j4], how="right").sort("a").show(true)
     #[
     ]#
 
