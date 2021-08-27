@@ -38,8 +38,10 @@ type UnimplementedError = object of CatchableError
 
 
 ###############################################################
+# 「_」で囲われた文字列を持つ列名は、基本的には禁止にする
 const dfEmpty = ""
 const defaultIndexName = "_idx_"
+const mergeIndexName = "_on_"
 const defaultDateTimeFormat = "yyyy-MM-dd HH:mm:ss"
 
 
@@ -511,6 +513,49 @@ proc show(df: DataFrame, indexColSign=false) =
     echo df.toFigure(indexColSign)
 
 ###############################################################
+proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
+    ## 指定のDataFrameの列を削除する.
+    runnableExamples:
+        df.dropColumns(["col1","col2"])
+    ##
+
+    result = df
+    for colName in colNames:
+        result.data.del(colName)
+
+proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): DataFrame =
+    ## DataFrameの列名を変更する.
+    ## renameMapには変更前列名と変更後列名のペアを指定する.
+    runnableExamples:
+        df.renameColumns({"col1":"COL1","col2":"COL2"})
+    ##
+
+    result = df
+    for renamePair in renameMap:
+        if result.data.contains(renamePair[0]):
+            result[renamePair[1]] = result[renamePair[0]]
+            result.data.del(renamePair[0])
+            #インデックス列が書き換えられたときはインデックス情報を更新する
+            if renamePair[0] == df.indexCol:
+                result.indexCol = renamePair[1]
+
+
+proc resetIndex(df: DataFrame): DataFrame =
+    result = initDataFrame(df)
+    for colName in df.columns:
+        if colName == df.indexCol:
+            result[colName] =
+                collect(newSeq):
+                    for i in 0..<df.len: $i
+        else:
+            result[colName] = df[colName]
+
+proc setIndex(df: DataFrame, indexCol: ColName): DataFrame =
+    result = df
+    result.indexCol = indexCol
+
+
+###############################################################
 proc concat(dfs: openArray[DataFrame]): DataFrame =
     ## 単純に下にDataFrameを連結し続ける.
     ## インデックスは最後に指定したDataFrameのインデックスとなる.
@@ -553,9 +598,24 @@ proc indicesOf[T](s: openArray[T], key: T): seq[int] =
             result.add(i)
 
 proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightOn: openArray[ColName], how="inner"): DataFrame =
-    ## df1とdf2をマージする
+    ## leftとrightをマージする
     ## indexColはleftの値が使用される（how="right"の場合はrightの値）
     ## indexColの名前はleftのindexCol名がrightにもある場合は「_0」が後ろにつく
+    runnableExamples:
+        var df1 = toDataFrame(
+            columns = {
+                "a": @["A_1", "A_1", "A_2", "A_3"],
+                "b": @["B_1", "B_2", "B_2", "B_3"],
+            }
+        )
+        var df2 = toDataFrame(
+            columns = {
+                "a": @["A_1", "A_1", "A_1", "A_2", "A_4"],
+                "a'": @["A_1", "A_2", "A_3", "A_4", "A_5"],
+                "c": @["C_10", "C_20", "C_30", "C_2", "C_4"],
+            }
+        )
+        var df3 = merge(df1, df2, ["a"], ["a'"], "left")
     ## 
 
     result = initDataFrame()
@@ -585,11 +645,11 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
                 colNames = concat(colNames, @[fmt"{colName}_0", fmt"{colName}_1"])
                 columnsTableL[colName] = fmt"{colName}_0"
                 columnsTableR[colName] = fmt"{colName}_1"
+            let columnsL = toHashSet(left.getColumnName())
+            let columnsR = (toHashSet(right.getColumnName()) - columnsL) + dupCols
             for colName in colNames:
                 result[colName] = initSeries()
             result.indexCol = columnsTableL[leftOn[0]]
-            let columnsL = toHashSet(left.getColumnName())
-            let columnsR = (toHashSet(right.getColumnName()) - columnsL) + dupCols
             #on列の共通部分の計算
             let leftOnSeries =
                 collect(newSeq):
@@ -612,7 +672,8 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
                     toHashSet(leftOnSeries)
                 else:
                     toHashSet(leftOnSeries) + toHashSet(rightOnSeries)
-            #共通部分を含むindexを抜き出し、その行の値を追加していくく
+            #共通部分を含むindexを抜き出し、その行の値を追加していく
+            var onColumn: seq[ColName] = @[]
             for c in adoptedOn:
                 let indicesL = leftOnSeries.indicesOf(c)
                 if indicesL.len != 0:
@@ -620,11 +681,13 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
                         let indicesR = rightOnSeries.indicesOf(c)
                         if indicesR.len != 0:
                             for indexR in indicesR:
+                                onColumn.add(left[leftOn[0]][indexL])
                                 for colName in columnsL:
                                     result.data[columnsTableL[colName]].add(left[colName][indexL])
                                 for colName in columnsR:
                                     result.data[columnsTableR[colName]].add(right[colName][indexR])
                         else:
+                            onColumn.add(left[leftOn[0]][indexL])
                             for colName in columnsL:
                                 result.data[columnsTableL[colName]].add(left[colName][indexL])
                             for colName in columnsR:
@@ -633,12 +696,16 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
                     let indicesR = rightOnSeries.indicesOf(c)
                     if indicesR.len != 0:
                         for indexR in indicesR:
+                            onColumn.add(right[rightOn[0]][indexR])
                             for colName in columnsR + toHashSet(on):
                                 result.data[columnsTableR[colName]].add(right[colName][indexR])
                             for colName in columnsL - toHashSet(on):
                                 result.data[columnsTableL[colName]].add(dfEmpty)
                     else:
                         raise newException(NimDataFrameError, "unknown error")
+            #インデックスの設定
+            result.indexCol = mergeIndexName
+            result[mergeIndexName] = onColumn
         else:
             var msg = ""
             if toHashSet(left.getColumnName())*toHashSet(leftOn) == toHashSet(leftOn):
@@ -660,13 +727,31 @@ proc merge(left: DataFrame, right: DataFrame, on: openArray[ColName], how="inner
 proc merge(left: DataFrame, right: DataFrame, on: ColName, how="inner"): DataFrame =
     merge(left, right, @[on], @[on], how)
 
-proc join(dfSource: DataFrame, dfs: openArray[DataFrame], how="left"): DataFrame =
-    result = dfSource.deepCopy()
+proc join(dfSource: DataFrame, dfArray: openArray[DataFrame], how="left"): DataFrame =
+    let dfs = concat(@[dfSource], dfArray.toSeq())
+    #重複列の名前とその変更後の名前を求めておく
+    var dupColsSeq: seq[ColName] = @[]
     for i in 0..<dfs.len:
-        result = merge(result, dfs[i], result.indexCol, dfs[i].indexCol, how)
+        for j in i+1..<dfs.len:
+            for dup in toHashSet(dfs[i].getColumnName()) * toHashSet(dfs[j].getColumnName()):
+                dupColsSeq.add(dup)
+    let dupCols = toHashSet(dupColsSeq)
+    var renameList: seq[seq[(ColName,ColName)]] = @[]
+    for i in 0..<dfs.len:
+        var renames: seq[(ColName, ColName)] = @[]
+        for colName in dfs[i].columns:
+            if dupCols.contains(colName):
+                renames.add((colName, fmt"{colName}_{i}"))
+        renameList.add(renames)
+    #１つずつマージ
+    result = dfs[0].renameColumns(renameList[0])
+    for i in 1..<dfs.len:
+        let df = dfs[i].renameColumns(renameList[i])
+        result = merge(result, df, result.indexCol, df.indexCol, how)
 
 proc join(dfSource: DataFrame, df: DataFrame, how="left"): DataFrame =
     join(dfSource, @[df], how)
+
 
 ###############################################################
 proc `+`(a: Cell, b: float): float =
@@ -791,46 +876,6 @@ proc v(df: DataFrame): DataFrame =
 
 
 ###############################################################
-proc dropColumns(df:DataFrame, colNames: openArray[ColName]): DataFrame =
-    ## 指定のDataFrameの列を削除する.
-    runnableExamples:
-        df.dropColumns(["col1","col2"])
-    ##
-
-    result = df
-    for colName in colNames:
-        result.data.del(colName)
-
-proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): DataFrame =
-    ## DataFrameの列名を変更する.
-    ## renameMapには変更前列名と変更後列名のペアを指定する.
-    runnableExamples:
-        df.renameColumns({"col1":"COL1","col2":"COL2"})
-    ##
-
-    result = df
-    for renamePair in renameMap:
-        if result.data.contains(renamePair[0]):
-            result[renamePair[1]] = result[renamePair[0]]
-            result.data.del(renamePair[0])
-
-
-proc resetIndex(df: DataFrame): DataFrame =
-    result = initDataFrame(df)
-    for colName in df.columns:
-        if colName == df.indexCol:
-            result[colName] =
-                collect(newSeq):
-                    for i in 0..<df.len: $i
-        else:
-            result[colName] = df[colName]
-
-proc setIndex(df: DataFrame, indexCol: ColName): DataFrame =
-    result = df
-    result.indexCol = indexCol
-
-
-###############################################################
 proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
     ## Seriesの各セルに対して関数fnを適用する.
     ## 関数fnにはSeriesの各セルが渡され、関数fnは文字列に変換可能な任意の型を返す.
@@ -866,14 +911,19 @@ proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
 
 
 ###############################################################
-proc sort[T](df: DataFrame, colName: ColName, fromCell: Cell -> T, ascending=true): DataFrame =
+proc sort[T](df: DataFrame, colName: ColName = "", fromCell: Cell -> T, ascending=true): DataFrame =
     ## DataFrameを指定列でソートする.
     ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する.
     ##
     result = initDataFrame(df)
+    let cn =
+        if colName != "":
+            colName
+        else:
+            df.indexCol
     var sortSource = collect(newSeq):
         for rowNumber, row in df.getRows().pairs():
-            (rowNumber, fromCell(row[colName]))
+            (rowNumber, fromCell(row[cn]))
     let coef =
         if ascending: 1
         else: -1
@@ -891,7 +941,7 @@ proc sort[T](df: DataFrame, colNames: openArray[ColName], fromCell: Cell -> T, a
     for colName in reversed(colNames):
         result = result.sort(colName, fromCell, ascending)
 
-proc sort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
+proc sort(df: DataFrame, colName: ColName = "", ascending=true): DataFrame =
     let f = proc(c: Cell): Cell = c
     sort(df, colName, f, ascending)
 proc sort(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFrame =
@@ -899,21 +949,21 @@ proc sort(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFram
     for colName in reversed(colNames):
         result = result.sort(colName, ascending)
 
-proc intSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
+proc intSort(df: DataFrame, colName: ColName = "", ascending=true): DataFrame =
     sort(df, colName, parseInt, ascending)
 proc intSort(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.intSort(colName, ascending)
 
-proc floatSort(df: DataFrame, colName: ColName, ascending=true): DataFrame =
+proc floatSort(df: DataFrame, colName: ColName = "", ascending=true): DataFrame =
     sort(df, colName, parseFloat, ascending)
 proc floatSort(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.floatSort(colName, ascending)
 
-proc datetimeSort(df: DataFrame, colName: ColName, format=defaultDateTimeFormat, ascending=true): DataFrame =
+proc datetimeSort(df: DataFrame, colName: ColName = "", format=defaultDateTimeFormat, ascending=true): DataFrame =
     sort(df, colName, genParseDatetime(format), ascending)
 proc datetimeSort(df: DataFrame, colNames: openArray[ColName], format=defaultDateTimeFormat, ascending=true): DataFrame =
     result = df
@@ -1437,7 +1487,7 @@ proc toBe() =
 
     merge(df_ab, df_ac, left_on=["a"], right_on=["a"], how="inner").sort(["a","b"]).show(true)
     #
-    echo "merge2 inner(2)################################"
+    echo "merge inner(2)################################"
     #[
     var df_ab = toDataFrame(
         rows = [
@@ -1457,30 +1507,30 @@ proc toBe() =
             @["A_2", "A_4",  "C_2"],
             @["A_4", "A_5",  "C_4"],
         ],
-        colNames = ["a","a_","c"]
+        colNames = ["a","a'","c"]
     )
-    merge(df_ab, df_ac3, left_on=["a"], right_on=["a_"], how="inner").sort(["a_","b"]).show(true)
+    merge(df_ab, df_ac3, left_on=["a"], right_on=["a'"], how="inner").sort(["a'","b"]).show(true)
     #
     echo "merge left(1)################################"
     merge(df_ab, df_ac, left_on=["a"], right_on=["a"], how="left").sort(["a","b"]).show(true)
     #
     echo "merge left(2)################################"
-    merge(df_ac3, df_ab, left_on=["a_"], right_on=["a"], how="left").sort(["a_","b"]).show(true)
+    merge(df_ac3, df_ab, left_on=["a'"], right_on=["a"], how="left").sort(["a'","b"]).show(true)
     #
     echo "merge left(3)################################"
-    merge(df_ab, df_ac3, left_on=["a"], right_on=["a_"], how="left").sort(["a_","b"]).show(true)
+    merge(df_ab, df_ac3, left_on=["a"], right_on=["a'"], how="left").sort(["a'","b"]).show(true)
     #
     echo "merge right(1)################################"
     merge(df_ab, df_ac, left_on=["a"], right_on=["a"], how="right").sort(["a","b"]).show(true)
     #
     echo "merge right(2)################################"
-    merge(df_ac3, df_ab, left_on=["a_"], right_on=["a"], how="right").sort(["a_","b"]).show(true)
+    merge(df_ac3, df_ab, left_on=["a'"], right_on=["a"], how="right").sort(["a'","b"]).show(true)
     #
     echo "merge outer(1)################################"
     merge(df_ab, df_ac, left_on=["a"], right_on=["a"], how="outer").sort(["a","b"]).show(true)
     #
     echo "merge outer(2)################################"
-    merge(df_ac3, df_ab, left_on=["a_"], right_on=["a"], how="outer").sort(["a_","b"]).show(true)
+    merge(df_ac3, df_ab, left_on=["a'"], right_on=["a"], how="outer").sort(["a'","b"]).show(true)
     #
     echo "join left(1)################################"
     var df_j1 = toDataFrame(
@@ -1512,28 +1562,28 @@ proc toBe() =
         },
         indexCol="a"
     )
-    join(df_j1, [df_j2, df_j3]).sort("a").show(true)
+    join(df_j1, [df_j2, df_j3]).sort().show(true)
     #
     echo "join inner(1)################################"
-    join(df_j1, [df_j2, df_j3], how="inner").sort("a").show(true)
+    join(df_j1, [df_j2, df_j3], how="inner").sort().show(true)
     #
     echo "join outer(1)################################"
-    join(df_j1, [df_j2, df_j3], how="outer").sort("a").show(true)
+    join(df_j1, [df_j2, df_j3], how="outer").sort().show(true)
     #
     echo "join right(1)################################"
-    join(df_j1, [df_j2, df_j3], how="right").sort("a").show(true)
+    join(df_j1, [df_j2, df_j3], how="right").sort().show(true)
     #
     echo "join left(2)################################"
-    join(df_j1, [df_j2, df_j4], how="left").sort("a").show(true)
+    join(df_j1, [df_j2, df_j4], how="left").sort().show(true)
     #
     echo "join inner(2)################################"
-    join(df_j1, [df_j2, df_j4], how="inner").sort("a").show(true)
+    join(df_j1, [df_j2, df_j4], how="inner").sort().show(true)
     #
     echo "join outer(2)################################"
-    join(df_j1, [df_j2, df_j4], how="outer").sort("a").show(true)
+    join(df_j1, [df_j2, df_j4], how="outer").sort().show(true)
     #
-    echo "join right(2)################################"
-    join(df_j1, [df_j2, df_j4], how="right").sort("a").show(true)
+    echo "join right(1)################################"
+    join(df_j1, [df_j2, df_j4], how="right").sort().show(true)
     #[
     ]#
 

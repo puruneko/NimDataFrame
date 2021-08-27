@@ -24,3 +24,6 @@ echo b["a"]
 echo toHashSet([1,2,3,4]) - toHashSet([2,3,5])
 
 echo false.ord
+
+for i in 0..<0:
+    echo i
