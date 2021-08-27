@@ -39,7 +39,7 @@ type UnimplementedError = object of CatchableError
 
 ###############################################################
 const dfEmpty = ""
-const defaultIndexName = "__index__"
+const defaultIndexName = "_idx_"
 const defaultDateTimeFormat = "yyyy-MM-dd HH:mm:ss"
 
 
@@ -403,7 +403,33 @@ proc toDataFrame[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], 
         result[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<rows.len: $i
+        result.indexCol = defaultIndexName
 
+proc toDataFrame(columns: openArray[(ColName, Series)], indexCol="" ): DataFrame =
+    result = initDataFrame()
+    var c: seq[ColName] = @[]
+    var l: seq[int] = @[]
+    #代入
+    for (colName, s) in columns:
+        result[colName] = initSeries()
+        for c in s:
+            result.data[colName].add(c)
+        c.add(colName)
+        l.add(s.len)
+    #長さチェック
+    if toHashSet(l).len != 1:
+        raise newException(NimDataFrameError, "arrays must all be same length")
+    #インデックスの設定
+    if c.contains(indexCol):
+        result.indexCol = indexCol
+    else:
+        if indexCol == "":
+            result[defaultIndexName] =
+                collect(newSeq):
+                    for i in 0..<l[0]: $i
+            result.indexCol = defaultIndexName
+        else:
+            raise newException(NimDataFrameError, fmt"not found {indexCol}")
 
 ###############################################################
 proc toCsv(df: DataFrame): string =
@@ -431,43 +457,50 @@ proc toCsv(df: DataFrame, filename: string, encoding="utf-8") =
 
 proc toFigure(df: DataFrame, indexColSign=false): string =
     result = ""
-    var columns = df.getColumnName()
-    for i, colName in columns.pairs():
-        if colName == df.indexCol:
-            columns.del(i)
-            columns = concat(@[df.indexCol], columns)
-            break
-    var width: Table[string,int]
-    var fullWidth = df.getColumnName().len
-    for colName in columns:
-        let dataWidth = max(
-            collect(newSeq) do:
-                for i in 0..<df[colName].len:
-                    df[colName][i].len
-        )
-        width[colName] = max(colName.len, dataWidth) + indexColSign.ord
-        fullWidth += width[colName] + 2
-    #
-    result &= "+" & "-".repeat(fullWidth-1) & "+"
-    result &= "\n"
-    result &= "|"
-    for colName in columns:
-        let name =
-            if indexColSign and colName == df.indexCol:
-                colName & "*"
-            else:
-                colName
-        result &= " ".repeat(width[colName]-name.len+1) & name & " |"
-    result &= "\n"
-    result &= "|" & "-".repeat(fullWidth-1) & "|"
-    result &= "\n"
-    #
-    for i in 0..<df.len:
+    #空のデータフレームの場合
+    if df[df.indexCol].len == 0:
+        result &= "+-------+\n"
+        result &= "| empty |\n"
+        result &= "+-------+"
+    #空ではない場合
+    else:
+        var columns = df.getColumnName()
+        for i, colName in columns.pairs():
+            if colName == df.indexCol:
+                columns.del(i)
+                columns = concat(@[df.indexCol], columns)
+                break
+        var width: Table[string,int]
+        var fullWidth = df.getColumnName().len
+        for colName in columns:
+            let dataWidth = max(
+                collect(newSeq) do:
+                    for i in 0..<df[colName].len:
+                        df[colName][i].len
+            )
+            width[colName] = max(colName.len, dataWidth) + indexColSign.ord
+            fullWidth += width[colName] + 2
+        #
+        result &= "+" & "-".repeat(fullWidth-1) & "+"
+        result &= "\n"
         result &= "|"
         for colName in columns:
-            result &= " ".repeat(width[colName]-df[colName][i].len+1) & df[colName][i] & " |"
+            let name =
+                if indexColSign and colName == df.indexCol:
+                    colName & "*"
+                else:
+                    colName
+            result &= " ".repeat(width[colName]-name.len+1) & name & " |"
         result &= "\n"
-    result &= "+" & "-".repeat(fullWidth-1) & "+"
+        result &= "|" & "-".repeat(fullWidth-1) & "|"
+        result &= "\n"
+        #
+        for i in 0..<df.len:
+            result &= "|"
+            for colName in columns:
+                result &= " ".repeat(width[colName]-df[colName][i].len+1) & df[colName][i] & " |"
+            result &= "\n"
+        result &= "+" & "-".repeat(fullWidth-1) & "+"
 
 proc show(df: DataFrame, indexColSign=false) =
     echo df.toFigure(indexColSign)
@@ -638,6 +671,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                 columnsTable2[colName] = fmt"{colName}_2"
             for colName in colNames:
                 result[colName] = initSeries()
+            result.indexCol = columnsTable1[on[0]]
             #on列の共通部分の計算
             let df1on =
                 collect(newSeq):
@@ -688,6 +722,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                 columnsTable2[colName] = fmt"{colName}_2"
             for colName in colNames:
                 result[colName] = initSeries()
+            result.indexCol = columnsTable1[on[0]]
             #df1のon列の計算
             let df1on =
                 collect(newSeq):
@@ -745,6 +780,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                 columnsTable2[colName] = fmt"{colName}_2"
             for colName in colNames:
                 result[colName] = initSeries()
+            result.indexCol = columnsTable1[on[0]]
             #df2のon列の計算
             let df1on =
                 collect(newSeq):
@@ -802,6 +838,7 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
                 columnsTable2[colName] = fmt"{colName}_2"
             for colName in colNames:
                 result[colName] = initSeries()
+            result.indexCol = columnsTable1[on[0]]
             #on列の和集合の計算
             let df1on =
                 collect(newSeq):
@@ -1299,7 +1336,6 @@ proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): Data
     ##
 
     result = initDataFrame()
-    result.indexCol = dfg.indexCol
     var dfs: seq[DataFrame] = @[]
     for mi in dfg.data.keys:
         #関数の計算
@@ -1312,6 +1348,7 @@ proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): Data
             df[colName] = @[colValue]
         dfs.add(df)
     result = concat(dfs = dfs)
+    result.indexCol = dfg.columns[0]
 
 proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> DataFrame): DataFrame =
     ## groupbyしたDataFrameに対して統計量を計算する.
@@ -1330,6 +1367,7 @@ proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> DataFrame): DataFrame =
             df[colName] = @[colValue]
         dfs.add(df)
     result = concat(dfs = dfs)
+    result.indexCol = dfg.columns[0]
 
 proc count(dfg: DataFrameGroupBy): DataFrame =
     dfg.agg(count)
@@ -1363,7 +1401,6 @@ proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): Da
     ##
 
     result = initDataFrame()
-    result.indexCol = dfg.indexCol
     var dfs: seq[DataFrame] = @[]
     for mi in dfg.data.keys:
         #関数の計算
@@ -1376,6 +1413,7 @@ proc apply[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): Da
             df[colName] = @[colValue]
         dfs.add(df)
     result = concat(dfs = dfs)
+    result.indexCol = dfg.columns[0]
 
 
 ###############################################################
@@ -1590,7 +1628,7 @@ proc toBe() =
         quit(fmt"{filename} open failed.")
     let csv = fp.readAll()
     #
-    echo "df--------------------------------"
+    echo "df################################"
     var df = toDataFrame(
         text=csv,
         headers=["time","name","sales","日本語"],
@@ -1599,14 +1637,14 @@ proc toBe() =
     df.show(true)
     #df.toCsv("test.csv")
     #
-    echo "dropEmpty--------------------------------"
+    echo "dropEmpty################################"
     df.dropEmpty().show(true)
     #
-    echo "fillEmpty--------------------------------"
+    echo "fillEmpty################################"
     df["sales"] = df["sales"].fillEmpty(0)
     df.show(true)
     #
-    echo "df1--------------------------------"
+    echo "df1################################"
     var df1 = toDataFrame(
         [
             @[1,2,3],
@@ -1619,78 +1657,78 @@ proc toBe() =
     )
     echo df1
     #
-    echo "drop--------------------------------"
+    echo "drop################################"
     df.dropColumns(["time","name"]).show(true)
     #
-    echo "rename--------------------------------"
+    echo "rename################################"
     df.renameColumns({"time":"TIME","name":"NAME","sales":"SALES"}).show(true)
     #
-    echo "stats--------------------------------"
+    echo "stats################################"
     df.mean().show(true)
     df.max().show(true)
     #
-    echo "map--------------------------------"
+    echo "map################################"
     echo df["sales"].intMap(c => c*2)
     echo df["time"].datetimeMap(c => c+initDuration(hours=1))
     let triple = proc(c: int): int =
         c * 3
     echo df["sales"].map(triple, parseInt)
     #
-    echo "filter--------------------------------"
+    echo "filter################################"
     df.filter(row => row["sales"] >= 2000).show(true)
     df.filter(row => row["sales"] > 1000 and 3000 > row["sales"]).show(true)
     #
-    echo "loc,iloc--------------------------------"
+    echo "loc,iloc################################"
     echo df1.loc("1")
     echo df.iloc(0)
     #
-    echo "getRows--------------------------------"
+    echo "getRows################################"
     echo df.getRows()
     echo df.getColumnName()
     #
-    echo "sort--------------------------------"
+    echo "sort################################"
     df.sort("name", ascending=false).show(true)
     df.sort("sales", parseInt, ascending=true).show(true)
     df.sort("sales", parseInt, ascending=false).show(true)
     df.datetimeSort("time", ascending=false).show(true)
     #
-    echo "resetIndex--------------------------------"
+    echo "resetIndex################################"
     df.intSort("sales").resetIndex().show(true)
     #
-    echo "index,shape--------------------------------"
+    echo "index,shape################################"
     echo df.index
     echo df.shape
     #
-    echo "[]--------------------------------"
+    echo "[]################################"
     df[["time","sales"]].show(true)
     df[0..4].show(true)
     df[[2,4,6]].show(true)
     #
-    echo "head,tail--------------------------------"
+    echo "head,tail################################"
     df.head(5).show(true)
     df.tail(5).show(true)
     df.head(999999999).show(true)
     df.tail(999999999).show(true)
     #
-    echo "duplicated--------------------------------"
+    echo "duplicated################################"
     echo df.duplicated(["sales"])
     df.dropDuplicates(["sales"]).show(true)
     df.dropDuplicates().show(true)
     df.dropDuplicates(["time","sales"]).show(true)
     #
-    echo "groupby--------------------------------"
+    echo "groupby################################"
     echo df.groupby(["time","name"])
     #
-    echo "groupby mean,max--------------------------------"
+    echo "groupby mean,max################################"
     df.groupby(["time","name"]).mean().show(true)
     df.groupby(["time","name"]).max().show(true)
     #
-    echo "groupby agg--------------------------------"
+    echo "groupby agg################################"
     proc aggFnG(s: Series): float {.closure.} =
         result = s.toFloat().mean()/100
-    df.groupby(["time","name"]).agg({"sales": aggFnG}).show(true)
+    echo df.groupby(["time","name"]).agg({"sales": aggFnG})
     #
-    echo "groupby apply--------------------------------"
+    echo "groupby apply################################"
     proc applyFnG(df: DataFrame): Table[ColName,Cell] =
         var c: Cell
         if df["name"][0] == "abc":
@@ -1702,78 +1740,75 @@ proc toBe() =
         }.toTable()
     df.groupby(["time","name"]).apply(applyFnG).show(true)
     #
-    echo "resaple 5 mean--------------------------------"
+    echo "resaple 5 mean################################"
     df.resample(5).sum().show(true)
     #
-    echo "resaple 1H agg1--------------------------------"
+    echo "resaple 1H agg1################################"
     df.setIndex("time").resample("1H").mean().show(true)
     #
-    echo "resaple 30M agg1--------------------------------"
+    echo "resaple 30M agg1################################"
     df.setIndex("time").resample("30M").mean().show(true)
     #
-    echo "resaple 30M agg2--------------------------------"
+    echo "resaple 30M agg2################################"
     proc aggFnRe(s: Series): float{.closure.} =
         sum(s)*100
     df.setIndex("time").resample("30M").agg({"sales":aggFnRe}).show(true)
     #
-    echo "resaple 30M apply--------------------------------"
+    echo "resaple 30M apply################################"
     df.setIndex("time").resample("30M").apply(applyFnG).show(true)
     #
-    echo "merge inner(1)--------------------------------"
+    echo "merge inner(1)################################"
     var df_ab = toDataFrame(
-        rows = [
-            @["A_1", "B_1"],
-            @["A_1", "B_2"],
-            @["A_2", "B_2"],
-            @["A_3", "B_3"],
-        ],
-        colNames = ["a","b"]
+        columns = {
+            "a": @["A_1", "A_1", "A_2", "A_3"],
+            "b": @["B_1", "B_2", "B_2", "B_3"],
+        }
     )
+    echo "df_ab"
+    df_ab.show(true)
     var df_ac = toDataFrame(
-        rows = [
-            @["A_1", "C_10"],
-            @["A_1", "C_20"],
-            @["A_1", "C_30"],
-            @["A_2", "C_2"],
-            @["A_4", "C_4"],
-        ],
-        colNames = ["a","c"]
+        columns = {
+            "a": @["A_1", "A_1", "A_1", "A_2", "A_4"],
+            "c": @["C_10", "C_20", "C_30", "C_2", "C_4"]
+        }
     )
-    merge(df_ab, df_ac, on="a").sort(["a","b"]).show(true)
-    #
-    echo "merge inner(2)--------------------------------"
+    echo "df_ac"
+    df_ac.show(true)
     var df_ac2 = toDataFrame(
-        rows = [
-            @["A_1", "B_10", "C_10"],
-            @["A_1", "B_20", "C_20"],
-            @["A_1", "B_30", "C_30"],
-            @["A_2", "B_2",  "C_2"],
-            @["A_4", "B_4",  "C_4"],
-        ],
-        colNames = ["a","b","c"]
+        columns = {
+            "a": @["A_1", "A_1", "A_1", "A_2", "A_4"],
+            "b": @["B_10", "B_20", "B_30", "B_2", "B_4"],
+            "c": @["C_10", "C_20", "C_30", "C_2", "C_4"]
+        }
     )
+    echo "df_ac2"
+    df_ac2.show(true)
+    echo "merge"
+    echo merge(df_ab, df_ac, on="a").sort(["a","b"])
+    #
+    echo "merge inner(2)################################"
     merge(df_ab, df_ac2, on=["a","b"]).sort(["a","b"]).show(true)
     #
-    echo "merge left(1)--------------------------------"
+    echo "merge left(1)################################"
     merge(df_ab, df_ac, on="a", how="left").sort(["a","b"]).show(true)
     #
-    echo "merge left(2)--------------------------------"
+    echo "merge left(2)################################"
     merge(df_ab, df_ac2, on=["a","b"], how="left").sort(["a","b"]).show(true)
     #
-    echo "merge right(1)--------------------------------"
+    echo "merge right(1)################################"
     merge(df_ab, df_ac, on="a", how="right").sort(["a","b"]).show(true)
     #
-    echo "merge right(2)--------------------------------"
+    echo "merge right(2)################################"
     merge(df_ab, df_ac2, on=["a","b"], how="right").sort(["a","b"]).show(true)
     #
-    echo "merge outer(1)--------------------------------"
+    echo "merge outer(1)################################"
     merge(df_ab, df_ac, on="a", how="outer").sort(["a","b"]).show(true)
     #
-    echo "merge outer(2)--------------------------------"
+    echo "merge outer(2)################################"
     merge(df_ab, df_ac2, on=["a","b"], how="outer").sort(["a","b"]).show(true)
     #
     #[
-    echo "join inner(1)--------------------------------"
+    echo "join inner(1)################################"
     let df_j1 = toDataFrame(
         rows = [
             @[1,3,7],
@@ -1803,23 +1838,34 @@ proc toBe() =
     )
     echo df_j1.join([df_j2], how="inner").sort("a")
     #
-    echo "join inner(2)--------------------------------"
+    echo "join inner(2)################################"
     echo df_j1.join([df_j2, df_j3], how="inner").sort("a")
     #
-    echo "join left(1)--------------------------------"
+    echo "join left(1)################################"
     echo df_j1.join([df_j2], how="left").sort("a")
     #
-    echo "join left(2)--------------------------------"
+    echo "join left(2)################################"
     echo df_j2.join([df_j3], how="left").sort("a")
     #
-    echo "join right(1)--------------------------------"
+    echo "join right(1)################################"
     echo df_j2.join([df_j3], how="right").sort("a")
     ]#
     #
-    echo "merge2 inner(1)--------------------------------"
+    echo "merge2 inner(1)################################"
     merge2(df_ab, df_ac, left_on=["a"], right_on=["a"], how="inner").sort(["a","b"]).show(true)
     #
-    echo "merge2 inner(2)--------------------------------"
+    echo "merge2 inner(2)################################"
+    #[
+    var df_ab = toDataFrame(
+        rows = [
+            @["A_1", "B_1"],
+            @["A_1", "B_2"],
+            @["A_2", "B_2"],
+            @["A_3", "B_3"],
+        ],
+        colNames = ["a","b"]
+    )
+    ]#
     var df_ac3 = toDataFrame(
         rows = [
             @["A_1", "A_1", "C_10"],
