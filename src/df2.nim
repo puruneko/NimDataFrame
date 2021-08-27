@@ -471,7 +471,248 @@ proc indicesOf[T](s: openArray[T], key: T): seq[int] =
         if x == key:
             result.add(i)
 
-proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"): DataFrame =
+proc merge(df1: DataFrame, df2: DataFrame, onLeft: openArray[ColName], onRight: openArray[ColName] how="inner"): DataFrame =
+    ## df1とdf2をマージする
+    ## 
+
+    result = initDataFrame()
+    if how == "inner":
+        #on列が存在する場合
+        if toHashSet(df1.getColumnName())*toHashSet(onLeft) == toHashSet(on) and
+            toHashSet(df2.getColumnName())*toHashSet(onRight) == toHashSet(on):
+            #resultの初期化・重複列の処理
+            var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
+            let duplicatedCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            var columnsTable1 = 
+                collect(initTable()):
+                    for colName in df1.columns:
+                        {colName: colName}
+            var columnsTable2 = 
+                collect(initTable()):
+                    for colName in df2.columns:
+                        {colName: colName}
+            let columns1 = toHashSet(df1.getColumnName())
+            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + duplicatedCols
+            for colName in duplicatedCols:
+                colNames.del(colNames.indexOf(colName))
+                colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
+                columnsTable1[colName] = fmt"{colName}_1"
+                columnsTable2[colName] = fmt"{colName}_2"
+            for colName in colNames:
+                result[colName] = initSeries()
+            #on列の共通部分の計算
+            let df1on =
+                collect(newSeq):
+                    for i in 0..<df1.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df1[colName][i])
+                        row
+            let df2on =
+                collect(newSeq):
+                    for i in 0..<df2.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df2[colName][i])
+                        row
+            let adoptedOn = toHashSet(df1on) * toHashSet(df2on)
+            #共通部分を含むindexを抜き出し、その行の値を追加していく
+            for c in adoptedOn:
+                for index1 in df1on.indicesOf(c):
+                    for index2 in df2on.indicesOf(c):
+                        for colName in columns1:
+                            result.data[columnsTable1[colName]].add(df1[colName][index1])
+                        for colName in columns2:
+                            result.data[columnsTable2[colName]].add(df2[colName][index2])
+        else:
+            raise newException(NimDataFrameError, fmt"column '{on}' not found")
+    elif how == "left":
+        #on列が存在する場合
+        if toHashSet(df1.getColumnName())*toHashSet(on) == toHashSet(on) and
+            toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
+            #resultの初期化・重複列の処理
+            var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
+            let duplicatedCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            var columnsTable1 = 
+                collect(initTable()):
+                    for colName in df1.columns:
+                        {colName: colName}
+            var columnsTable2 = 
+                collect(initTable()):
+                    for colName in df2.columns:
+                        {colName: colName}
+            let columns1 = toHashSet(df1.getColumnName())
+            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + duplicatedCols
+            for colName in duplicatedCols:
+                colNames.del(colNames.indexOf(colName))
+                colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
+                columnsTable1[colName] = fmt"{colName}_1"
+                columnsTable2[colName] = fmt"{colName}_2"
+            for colName in colNames:
+                result[colName] = initSeries()
+            #df1のon列の計算
+            let df1on =
+                collect(newSeq):
+                    for i in 0..<df1.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df1[colName][i])
+                        row
+            let df2on =
+                collect(newSeq):
+                    for i in 0..<df2.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df2[colName][i])
+                        row
+            let adoptedOn = toHashSet(df1on)
+            #共通部分を含むindexを抜き出し、その行の値を追加していく
+            for c in adoptedOn:
+                for index1 in df1on.indicesOf(c):
+                    let indices2 = df2on.indicesOf(c)
+                    if indices2.len != 0:
+                        for index2 in indices2:
+                            for colName in columns1:
+                                result.data[columnsTable1[colName]].add(df1[colName][index1])
+                            for colName in columns2:
+                                result.data[columnsTable2[colName]].add(df2[colName][index2])
+                    else:
+                        for colName in columns1:
+                            result.data[columnsTable1[colName]].add(df1[colName][index1])
+                        for colName in columns2:
+                            result.data[columnsTable2[colName]].add(dfEmpty)
+        else:
+            raise newException(NimDataFrameError, fmt"column '{on}' not found")
+    elif how == "right":
+        #on列が存在する場合
+        if toHashSet(df1.getColumnName())*toHashSet(on) == toHashSet(on) and
+            toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
+            #resultの初期化・重複列の処理
+            var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
+            let duplicatedCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            var columnsTable1 = 
+                collect(initTable()):
+                    for colName in df1.columns:
+                        {colName: colName}
+            var columnsTable2 = 
+                collect(initTable()):
+                    for colName in df2.columns:
+                        {colName: colName}
+            let columns2 = toHashSet(df2.getColumnName())
+            let columns1 = (toHashSet(df1.getColumnName()) - columns2) + duplicatedCols
+            for colName in duplicatedCols:
+                colNames.del(colNames.indexOf(colName))
+                colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
+                columnsTable1[colName] = fmt"{colName}_1"
+                columnsTable2[colName] = fmt"{colName}_2"
+            for colName in colNames:
+                result[colName] = initSeries()
+            #df2のon列の計算
+            let df1on =
+                collect(newSeq):
+                    for i in 0..<df1.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df1[colName][i])
+                        row
+            let df2on =
+                collect(newSeq):
+                    for i in 0..<df2.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df2[colName][i])
+                        row
+            let adoptedOn = toHashSet(df2on)
+            #共通部分を含むindexを抜き出し、その行の値を追加していく
+            for c in adoptedOn:
+                for index2 in df2on.indicesOf(c):
+                    let indices1 = df1on.indicesOf(c)
+                    if indices1.len != 0:
+                        for index1 in indices1:
+                            for colName in columns2:
+                                result.data[columnsTable2[colName]].add(df2[colName][index2])
+                            for colName in columns1:
+                                result.data[columnsTable1[colName]].add(df1[colName][index1])
+                    else:
+                        for colName in columns2:
+                            result.data[columnsTable2[colName]].add(df2[colName][index2])
+                        for colName in columns1:
+                            result.data[columnsTable1[colName]].add(dfEmpty)
+        else:
+            raise newException(NimDataFrameError, fmt"column '{on}' not found")
+    elif how == "outer":
+        #on列が存在する場合
+        if toHashSet(df1.getColumnName())*toHashSet(on) == toHashSet(on) and
+            toHashSet(df2.getColumnName())*toHashSet(on) == toHashSet(on):
+            #resultの初期化・重複列の処理
+            var colNames = (toHashSet(df1.getColumnName()) + toHashSet(df2.getColumnName())).toSeq()
+            let duplicatedCols = (toHashSet(df1.getColumnName()) * toHashSet(df2.getColumnName())) - toHashSet(on)
+            var columnsTable1 = 
+                collect(initTable()):
+                    for colName in df1.columns:
+                        {colName: colName}
+            var columnsTable2 = 
+                collect(initTable()):
+                    for colName in df2.columns:
+                        {colName: colName}
+            let columns1 = toHashSet(df1.getColumnName())
+            let columns2 = (toHashSet(df2.getColumnName()) - columns1) + duplicatedCols
+            for colName in duplicatedCols:
+                colNames.del(colNames.indexOf(colName))
+                colNames = concat(colNames, @[fmt"{colName}_1", fmt"{colName}_2"])
+                columnsTable1[colName] = fmt"{colName}_1"
+                columnsTable2[colName] = fmt"{colName}_2"
+            for colName in colNames:
+                result[colName] = initSeries()
+            #on列の和集合の計算
+            let df1on =
+                collect(newSeq):
+                    for i in 0..<df1.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df1[colName][i])
+                        row
+            let df2on =
+                collect(newSeq):
+                    for i in 0..<df2.len:
+                        var row: seq[Cell] = @[]
+                        for colName in on:
+                            row.add(df2[colName][i])
+                        row
+            let adoptedOn = toHashSet(df1on) + toHashsET(df2on)
+            #共通部分を含むindexを抜き出し、その行の値を追加していく
+            for c in adoptedOn:
+                let indices1 = df1on.indicesOf(c)
+                if indices1.len != 0:
+                    for index1 in indices1:
+                        let indices2 = df2on.indicesOf(c)
+                        if indices2.len != 0:
+                            for index2 in indices2:
+                                for colName in columns1:
+                                    result.data[columnsTable1[colName]].add(df1[colName][index1])
+                                for colName in columns2:
+                                    result.data[columnsTable2[colName]].add(df2[colName][index2])
+                        else:
+                            for colName in columns1:
+                                result.data[columnsTable1[colName]].add(df1[colName][index1])
+                            for colName in columns2:
+                                result.data[columnsTable2[colName]].add(dfEmpty)
+                else:
+                    let indices2 = df2on.indicesOf(c)
+                    if indices2.len != 0:
+                        for index2 in indices2:
+                            for colName in columns2 + toHashSet(on):
+                                result.data[columnsTable2[colName]].add(df2[colName][index2])
+                            for colName in columns1 - toHashSet(on):
+                                result.data[columnsTable1[colName]].add(dfEmpty)
+                    else:
+                        raise newException(NimDataFrameError, "unknown error")
+        else:
+            raise newException(NimDataFrameError, fmt"common column '{on}' not found")
+    else:
+        raise newException(NimDataFrameError, fmt"invalid method '{how}'")
+
+proc merge2(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"): DataFrame =
     ## df1とdf2をマージする
     ## 
 
@@ -711,8 +952,135 @@ proc merge(df1: DataFrame, df2: DataFrame, on: openArray[ColName], how="inner"):
             raise newException(NimDataFrameError, fmt"common column '{on}' not found")
     else:
         raise newException(NimDataFrameError, fmt"invalid method '{how}'")
+
 proc merge(df1: DataFrame, df2: DataFrame, on: ColName, how="inner"): DataFrame =
     merge(df1, df2, [on], how)
+
+proc join(dfSource: DataFrame, dfArray: openArray[DataFrame], how="left"): DataFrame =
+    ## dfSourceとdfsをマージする
+    ## 
+
+    result = initDataFrame()
+    result.indexCol = dfSource.indexCol
+    let dfs = concat(@[dfSource], dfArray.toSeq())
+    if how == "inner":
+        #resultの初期化・重複列の処理
+        var colNames = toHashSet(dfs[0].getColumnName())
+        for df in dfs[1..^1]:
+            colNames = colNames + toHashSet(df.getColumnName())
+        var colNamesSeq = colNames.toSeq()
+        var columnsTable: seq[Table[ColName,ColName]] = @[]
+        for df in dfs:
+            columnsTable.add(
+                collect(initTable()) do:
+                    for colName in df.columns:
+                        {colName: colName}
+            )
+        for i in 0..<dfs.len:
+            for j in i+1..<dfs.len:
+                let dup = (toHashSet(dfs[i].getColumnName()) * toHashSet(dfs[j].getColumnName())) - toHashSet([dfs[i].indexCol, dfs[j].indexCol])
+                for colName in dup:
+                    colNamesSeq.del(colNamesSeq.indexOf(colName))
+                    colNamesSeq = concat(colNamesSeq, @[fmt"{colName}_{i}", fmt"{colName}_{j}"])
+                    columnsTable[i][colName] = fmt"{colName}_{i}"
+                    columnsTable[j][colName] = fmt"{colName}_{j}"
+        colNames = toHashSet(colNamesSeq)
+        for colName in colNames:
+            result[colName] = initSeries()
+        #on列の共通部分の計算
+        var dfIndex: seq[seq[Cell]] = @[]
+        for df in dfs:
+            dfIndex.add(
+                collect(newSeq) do:
+                    for i in 0..<df.len:
+                        df[df.indexCol][i]
+            )
+        var adoptedIndex = toHashSet(dfIndex[0])
+        for i in 1..<dfs.len:
+            adoptedIndex = adoptedIndex * toHashSet(dfIndex[i])
+        #共通部分を含むindexを抜き出し、その行の値を追加していく
+        proc addValue(res: var DataFrame, c: ColName, dfs: seq[DataFrame], dfIndex: seq[seq[Cell]], columnsTable: seq[Table[ColName,ColName]], indices: seq[int] = @[], i = 0) =
+            if i < dfs.len:
+                let localIndices = dfIndex[i].indicesOf(c)
+                if localIndices.len != 0:
+                    for index in localIndices:
+                        addValue(res, c, dfs, dfIndex, columnsTable, concat(indices, @[index]), i+1)
+                else:
+                    addValue(res, c, dfs, dfIndex, columnsTable, concat(indices, @[-1]), i+1)
+            else:
+                res.data[res.indexCol].add(dfs[0][dfs[0].indexCol][indices[0]])
+                for j, df in dfs.pairs():
+                    for colName in df.getColumnName():
+                        if colName == df.indexCol:
+                            continue
+                        if indices[j] != -1:
+                            res.data[columnsTable[j][colName]].add(df[colName][indices[j]])
+                        else:
+                            res.data[columnsTable[j][colName]].add(dfEmpty)
+
+        for c in adoptedIndex:
+            addValue(result, c, dfs, dfIndex, columnsTable)
+    elif how == "left":
+        #resultの初期化・重複列の処理
+        var colNames = toHashSet(dfs[0].getColumnName())
+        for df in dfs[1..^1]:
+            colNames = colNames + toHashSet(df.getColumnName())
+        var colNamesSeq = colNames.toSeq()
+        var columnsTable: seq[Table[ColName,ColName]] = @[]
+        for df in dfs:
+            columnsTable.add(
+                collect(initTable()) do:
+                    for colName in df.columns:
+                        {colName: colName}
+            )
+        for i in 0..<dfs.len:
+            for j in i+1..<dfs.len:
+                let dup = (toHashSet(dfs[i].getColumnName()) * toHashSet(dfs[j].getColumnName())) - toHashSet([dfs[i].indexCol, dfs[j].indexCol])
+                for colName in dup:
+                    colNamesSeq.del(colNamesSeq.indexOf(colName))
+                    colNamesSeq = concat(colNamesSeq, @[fmt"{colName}_{i}", fmt"{colName}_{j}"])
+                    columnsTable[i][colName] = fmt"{colName}_{i}"
+                    columnsTable[j][colName] = fmt"{colName}_{j}"
+        colNames = toHashSet(colNamesSeq)
+        for colName in colNames:
+            result[colName] = initSeries()
+        #on列の共通部分の計算
+        var dfIndex: seq[seq[Cell]] = @[]
+        for df in dfs:
+            dfIndex.add(
+                collect(newSeq) do:
+                    for i in 0..<df.len:
+                        df[df.indexCol][i]
+            )
+        var adoptedIndex = toHashSet(dfIndex[0])
+        #[
+        for i in 1..<dfs.len:
+            adoptedIndex = adoptedIndex * toHashSet(dfIndex[i])
+        ]#
+        #共通部分を含むindexを抜き出し、その行の値を追加していく
+        proc addValue(res: var DataFrame, c: ColName, dfs: seq[DataFrame], dfIndex: seq[seq[Cell]], columnsTable: seq[Table[ColName,ColName]], indices: seq[int] = @[], i = 0) =
+            if i < dfs.len:
+                let localIndices = dfIndex[i].indicesOf(c)
+                if localIndices.len != 0:
+                    for index in localIndices:
+                        addValue(res, c, dfs, dfIndex, columnsTable, concat(indices, @[index]), i+1)
+                else:
+                    addValue(res, c, dfs, dfIndex, columnsTable, concat(indices, @[-1]), i+1)
+            else:
+                res.data[res.indexCol].add(dfs[0][dfs[0].indexCol][indices[0]])
+                for j, df in dfs.pairs():
+                    for colName in df.getColumnName():
+                        if colName == df.indexCol:
+                            continue
+                        if indices[j] != -1:
+                            res.data[columnsTable[j][colName]].add(df[colName][indices[j]])
+                        else:
+                            res.data[columnsTable[j][colName]].add(dfEmpty)
+
+        for c in adoptedIndex:
+            addValue(result, c, dfs, dfIndex, columnsTable)
+    else:
+        raise newException(NimDataFrameError, fmt"invalid method '{how}'")
 
 
 ###############################################################
@@ -1506,6 +1874,48 @@ proc toBe() =
     #
     echo "merge outer(2)--------------------------------"
     echo merge(df_ab, df_ac2, on=["a","b"], how="outer").sort(["a","b"])
+    #
+    echo "join inner(1)--------------------------------"
+    let df_j1 = toDataFrame(
+        rows = [
+            @[1,3,7],
+            @[2,6,14],
+            @[3,9,21],
+        ],
+        colNames = ["a","b","c"],
+        indexCol = "a",
+    )
+    let df_j2 = toDataFrame(
+        rows = [
+            @[1,3,8],
+            @[2,6,16],
+            @[4,9,24],
+        ],
+        colNames = ["a","b","d"],
+        indexCol = "a",
+    )
+    let df_j3 = toDataFrame(
+        rows = [
+            @[1,3,9],
+            @[2,6,18],
+            @[5,9,27],
+        ],
+        colNames = ["a","d","e"],
+        indexCol = "a",
+    )
+    echo df_j1.join([df_j2], how="inner").sort("a")
+    #
+    echo "join inner(2)--------------------------------"
+    echo df_j1.join([df_j2, df_j3], how="inner").sort("a")
+    #
+    echo "join left(1)--------------------------------"
+    echo df_j1.join([df_j2], how="left").sort("a")
+    #
+    echo "join left(2)--------------------------------"
+    echo df_j2.join([df_j3], how="left").sort("a")
+    #
+    echo "join right(1)--------------------------------"
+    echo df_j2.join([df_j3], how="right").sort("a")
     #[
     ]#
 
