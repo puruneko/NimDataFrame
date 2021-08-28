@@ -74,7 +74,7 @@ iterator rows(df: DataFrame): Row =
             row[colName] = df.data[colName][i]
         yield row
 
-proc getColumnName(df: DataFrame): seq[string] =
+proc getColumns(df: DataFrame): seq[string] =
     for column in df.columns:
         result.add(column)
 
@@ -85,6 +85,11 @@ proc getSeries(df: DataFrame): seq[Series] =
 proc getRows(df: DataFrame): seq[Row] =
     for row in df.rows:
         result.add(row)
+
+proc initRow(df: DataFrame): Row =
+    result = initRow()
+    for colName in df.columns:
+        result[colName] = dfEmpty
 
 
 proc `$`(x: DateTime): string =
@@ -158,6 +163,22 @@ proc len(df: DataFrame): int =
                 df[colName].len
     )
 
+proc add(df: DataFrame, row: Row): DataFrame =
+    result = df
+    var columns: seq[ColName] = @[]
+    for colName in row.keys:
+        columns.add(colName)
+    let columnsHash = toHashSet(columns)
+    let dfColumnsHash = toHashSet(df.getColumns())
+    if dfColumnsHash == columnsHash:
+        for colName in dfColumnsHash:
+            result.data[colName].add(row[colName])
+    else:
+        raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
+
+proc add(df: DataFrame, row: openArray[(ColName, Cell)]): DataFrame =
+    df.add(row.toTable())
+
 proc deepCopy(df: DataFrame): DataFrame =
     result = initDataFrame(df)
     for i in 0..<df.len:
@@ -167,7 +188,7 @@ proc deepCopy(df: DataFrame): DataFrame =
 proc `[]`(df: DataFrame, colNames: openArray[ColName]): DataFrame =
     ## 指定した列だけ返す.
     result = initDataFrame()
-    let columns = df.getColumnName()
+    let columns = df.getColumns()
     for colName in colNames:
         if not columns.contains(colName):
             raise newException(NimDataFrameError, fmt"df doesn't have column {colName}")
@@ -222,7 +243,7 @@ proc iloc(df: DataFrame, i: int): Row =
 proc loc(df: DataFrame, c: Cell): DataFrame =
     ## indexの行の値がcの値と一致する行を返す.
     result = initDataFrame(df)
-    let columns = df.getColumnName()
+    let columns = df.getColumns()
     for i in 0..<df.len:
         if df[df.indexCol][i] == c:
             for colName in columns:
@@ -243,13 +264,13 @@ proc index(df: DataFrame): Series =
     df[df.indexCol]
 
 proc shape(df: DataFrame): (int,int) =
-    let colNumber = df.getColumnName.len
+    let colNumber = df.getColumns.len
     let rowNumber = df.len
     result = (rowNumber, colNumber)
 
 proc healthCheck(df: DataFrame, raiseException=false): bool{.discardable.} =
     #indexColチェック
-    if not df.getColumnName().contains(df.indexCol):
+    if not df.getColumns().contains(df.indexCol):
         if raiseException:
             raise newException(NimDataFrameError, fmt"not found index column '{df.indexCol}' in DataFrame")
         return false
@@ -353,7 +374,7 @@ proc toDataFrame(
             result.data[colName].add(cell.strip())
     #インデックスの設定
     if indexCol != "":
-        if result.getColumnName().contains(indexCol):
+        if result.getColumns().contains(indexCol):
             result.indexCol = indexCol
         else:
             raise newException(NimDataFrameError, fmt"not found {indexCol}")
@@ -416,7 +437,7 @@ proc toDataFrame[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], 
                 )
     #インデックスの設定
     if indexCol != "":
-        if result.getColumnName().contains(indexCol):
+        if result.getColumns().contains(indexCol):
             result.indexCol = indexCol
         else:
             raise newException(NimDataFrameError, fmt"not found {indexCol}")
@@ -485,14 +506,14 @@ proc toFigure(df: DataFrame, indexColSign=false): string =
         result &= "+-------+"
     #空ではない場合
     else:
-        var columns = df.getColumnName()
+        var columns = df.getColumns()
         for i, colName in columns.pairs():
             if colName == df.indexCol:
                 columns.del(i)
                 columns = concat(@[df.indexCol], columns)
                 break
         var width: Table[string,int]
-        var fullWidth = df.getColumnName().len
+        var fullWidth = df.getColumns().len
         for colName in columns:
             let dataWidth = max(
                 collect(newSeq) do:
@@ -636,16 +657,16 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
     #
     if ["inner","left","outer"].contains(how):
         #on列が存在する場合
-        if toHashSet(left.getColumnName())*toHashSet(leftOn) == toHashSet(leftOn) and
-            toHashSet(right.getColumnName())*toHashSet(rightOn) == toHashSet(rightOn):
+        if toHashSet(left.getColumns())*toHashSet(leftOn) == toHashSet(leftOn) and
+            toHashSet(right.getColumns())*toHashSet(rightOn) == toHashSet(rightOn):
             #resultの初期化・重複列の処理
-            var colNames = (toHashSet(left.getColumnName()) + toHashSet(right.getColumnName())).toSeq()
+            var colNames = (toHashSet(left.getColumns()) + toHashSet(right.getColumns())).toSeq()
             let on =
                 if leftOn == rightOn:
                     leftOn.toSeq()
                 else:
                     @[]
-            let dupCols = (toHashSet(left.getColumnName()) * toHashSet(right.getColumnName())) - toHashSet(on)
+            let dupCols = (toHashSet(left.getColumns()) * toHashSet(right.getColumns())) - toHashSet(on)
             var columnsTableL = 
                 collect(initTable()):
                     for colName in left.columns:
@@ -659,8 +680,8 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
                 colNames = concat(colNames, @[fmt"{colName}_0", fmt"{colName}_1"])
                 columnsTableL[colName] = fmt"{colName}_0"
                 columnsTableR[colName] = fmt"{colName}_1"
-            let columnsL = toHashSet(left.getColumnName())
-            let columnsR = (toHashSet(right.getColumnName()) - columnsL) + dupCols
+            let columnsL = toHashSet(left.getColumns())
+            let columnsR = (toHashSet(right.getColumns()) - columnsL) + dupCols
             for colName in colNames:
                 result[colName] = initSeries()
             result.indexCol = columnsTableL[leftOn[0]]
@@ -722,7 +743,7 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
             result[mergeIndexName] = onColumn
         else:
             var msg = ""
-            if toHashSet(left.getColumnName())*toHashSet(leftOn) == toHashSet(leftOn):
+            if toHashSet(left.getColumns())*toHashSet(leftOn) == toHashSet(leftOn):
                 msg &= fmt"left column '{leftOn}' not found. "
             else:
                 msg &= fmt"right column '{leftOn}' not found. "
@@ -733,13 +754,13 @@ proc merge(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightO
         raise newException(NimDataFrameError, fmt"invalid method '{how}'")
 
 proc merge(left: DataFrame, right: DataFrame, leftOn: ColName, rightOn: ColName, how="inner"): DataFrame =
-    merge(left, right, @[leftOn], @[rightOn], how)
+    merge(left, right, [leftOn], [rightOn], how)
 
 proc merge(left: DataFrame, right: DataFrame, on: openArray[ColName], how="inner"): DataFrame =
     merge(left, right, on, on, how)
 
 proc merge(left: DataFrame, right: DataFrame, on: ColName, how="inner"): DataFrame =
-    merge(left, right, @[on], @[on], how)
+    merge(left, right, [on], [on], how)
 
 proc join(dfSource: DataFrame, dfArray: openArray[DataFrame], how="left"): DataFrame =
     let dfs = concat(@[dfSource], dfArray.toSeq())
@@ -747,7 +768,7 @@ proc join(dfSource: DataFrame, dfArray: openArray[DataFrame], how="left"): DataF
     var dupColsSeq: seq[ColName] = @[]
     for i in 0..<dfs.len:
         for j in i+1..<dfs.len:
-            for dup in toHashSet(dfs[i].getColumnName()) * toHashSet(dfs[j].getColumnName()):
+            for dup in toHashSet(dfs[i].getColumns()) * toHashSet(dfs[j].getColumns()):
                 dupColsSeq.add(dup)
     let dupCols = toHashSet(dupColsSeq)
     var renameList: seq[seq[(ColName,ColName)]] = @[]
@@ -764,7 +785,7 @@ proc join(dfSource: DataFrame, dfArray: openArray[DataFrame], how="left"): DataF
         result = merge(result, df, result.indexCol, df.indexCol, how)
 
 proc join(dfSource: DataFrame, df: DataFrame, how="left"): DataFrame =
-    join(dfSource, @[df], how)
+    join(dfSource, [df], how)
 
 
 ###############################################################
@@ -899,9 +920,13 @@ proc map[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
         df["col1"].map(triple, parseInt)
     ##
 
+    result = initSeries()
     for c in s:
         result.add(fn(fromCell(c)).parseString())
 
+proc map[T](s: Series, fn: string -> T): Series =
+    let f = proc(c: Cell): string = c
+    map(s, fn, f)
 proc intMap[T](s: Series, fn: int -> T): Series =
     map(s, fn, parseInt)
 proc floatMap[T](s: Series, fn: float -> T): Series =
@@ -1399,7 +1424,7 @@ proc toBe() =
     #
     echo "getRows################################"
     echo df.getRows()
-    echo df.getColumnName()
+    echo df.getColumns()
     #
     echo "sort################################"
     df.sort("name", ascending=false).show(true)
@@ -1612,6 +1637,9 @@ proc toBe() =
     echo healthCheck(df_h)
     df_h.indexCol = "c"
     echo healthCheck(df_h)
+    #
+    echo "add################################"
+    df.add({"time":"a","name":"b","sales":"c","_idx_":"d", "日本語":"e"}).show(true)
     #[
     ]#
 
