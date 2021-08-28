@@ -247,6 +247,20 @@ proc shape(df: DataFrame): (int,int) =
     let rowNumber = df.len
     result = (rowNumber, colNumber)
 
+proc healthCheck(df: DataFrame, raiseException=false): bool{.discardable.} =
+    #indexColチェック
+    if not df.getColumnName().contains(df.indexCol):
+        if raiseException:
+            raise newException(NimDataFrameError, fmt"not found index column '{df.indexCol}' in DataFrame")
+        return false
+    #Seriesの長さチェック
+    let length = df.len()
+    for colName in df.columns:
+        if df[colName].len != length:
+            if raiseException:
+                raise newException(NimDataFrameError, fmt"series must all be same length")
+            return false
+    return true
 
 ###############################################################
 proc isIntSeries(s: Series): bool =
@@ -425,7 +439,7 @@ proc toDataFrame[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataFr
         l.add(s.len)
     #長さチェック
     if toHashSet(l).len != 1:
-        raise newException(NimDataFrameError, "arrays must all be same length")
+        raise newException(NimDataFrameError, "series must all be same length")
     #インデックスの設定
     if c.contains(indexCol):
         result.indexCol = indexCol
@@ -1584,6 +1598,20 @@ proc toBe() =
     #
     echo "join right(1)################################"
     join(df_j1, [df_j2, df_j4], how="right").sort().show(true)
+
+    #
+    echo "healthCheck################################"
+    var df_h = initDataFrame()
+    df_h["a"] = @[1]
+    df_h["b"] = @[1,2,3,4,5]
+    df_h.indexCol = "a"
+    echo healthCheck(df_h)
+    df_h.indexCol = "b"
+    echo healthCheck(df_h)
+    df_h["b"] = @[2]
+    echo healthCheck(df_h)
+    df_h.indexCol = "c"
+    echo healthCheck(df_h)
     #[
     ]#
 
