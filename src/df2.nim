@@ -575,15 +575,20 @@ proc renameColumns(df: DataFrame, renameMap: openArray[(ColName,ColName)]): Data
                 result.indexCol = renamePair[1]
 
 
-proc resetIndex(df: DataFrame): DataFrame =
+proc resetIndex[T](df: DataFrame, fn: int -> T): DataFrame =
     result = initDataFrame(df)
     for colName in df.columns:
         if colName == df.indexCol:
             result[colName] =
                 collect(newSeq):
-                    for i in 0..<df.len: $i
+                    for i in 0..<df.len:
+                        fn(i).parseString()
         else:
             result[colName] = df[colName]
+
+proc resetIndex(df: DataFrame): DataFrame =
+    let f = proc(i: int): Cell = $i
+    result = df.resetIndex(f)
 
 proc setIndex(df: DataFrame, indexCol: ColName): DataFrame =
     result = df
