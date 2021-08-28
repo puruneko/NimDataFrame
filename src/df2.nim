@@ -163,8 +163,7 @@ proc len(df: DataFrame): int =
                 df[colName].len
     )
 
-proc add(df: DataFrame, row: Row): DataFrame =
-    result = df
+proc add(df: var DataFrame, row: Row) =
     var columns: seq[ColName] = @[]
     for colName in row.keys:
         columns.add(colName)
@@ -172,11 +171,11 @@ proc add(df: DataFrame, row: Row): DataFrame =
     let dfColumnsHash = toHashSet(df.getColumns())
     if dfColumnsHash == columnsHash:
         for colName in dfColumnsHash:
-            result.data[colName].add(row[colName])
+            df.data[colName].add(row[colName])
     else:
         raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
 
-proc add(df: DataFrame, row: openArray[(ColName, Cell)]): DataFrame =
+proc add(df: var DataFrame, row: openArray[(ColName, Cell)]) =
     df.add(row.toTable())
 
 proc deepCopy(df: DataFrame): DataFrame =
@@ -887,31 +886,30 @@ proc min(s: Series): Cell =
 proc v(s: Series): Cell =
     s.aggMath(stats.variance)
 
-proc agg[T](df: DataFrame, aggFn: Series -> T): DataFrame =
+proc agg[T](df: DataFrame, aggFn: Series -> T): Row =
     ## DataFrameの各列に対して統計量を計算する.
     ## aggFnにはSeriesの統計量を計算する関数を指定する.
     runnableExamples:
         df.agg(mean)
     ##
 
-    result = initDataFrame()
+    result = initRow(df)
     for (colName, s) in df.data.pairs():
-        let c = aggFn(s)
-        result[colName] = @[c.parseString()]
+        result[colName] = aggFn(s).parseString()
 
-proc count(df: DataFrame): DataFrame =
+proc count(df: DataFrame): Row =
     df.agg(count)
-proc sum(df: DataFrame): DataFrame =
+proc sum(df: DataFrame): Row =
     df.agg(sum)
-proc mean(df: DataFrame): DataFrame =
+proc mean(df: DataFrame): Row =
     df.agg(mean)
-proc std(df: DataFrame): DataFrame =
+proc std(df: DataFrame): Row =
     df.agg(std)
-proc max(df: DataFrame): DataFrame =
+proc max(df: DataFrame): Row =
     df.agg(max)
-proc min(df: DataFrame): DataFrame =
+proc min(df: DataFrame): Row =
     df.agg(min)
-proc v(df: DataFrame): DataFrame =
+proc v(df: DataFrame): Row =
     df.agg(v)
 
 
@@ -1081,21 +1079,25 @@ proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): Data
     ##
 
     result = initDataFrame()
-    var dfs: seq[DataFrame] = @[]
+    #関数の適用
+    var rows: seq[Row] = @[]
     for mi in dfg.data.keys:
         #関数の計算
-        var df = initDataFrame()
+        var row = initRow()
         for (colName, fn) in aggFn:
-            let c = fn(dfg.data[mi][colName])
-            df[colName] = @[c.parseString()]
+            row[colName] = fn(dfg.data[mi][colName]).parseString()
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
-            df[colName] = @[colValue]
-        dfs.add(df)
-    result = concat(dfs = dfs)
+            row[colName] = colValue
+        rows.add(row)
+    #結合
+    for colName in rows[0].keys:
+        result[colName] = initSeries()
+    for row in rows:
+        result.add(row)
     result.indexCol = dfg.columns[0]
 
-proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> DataFrame): DataFrame =
+proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> Row): DataFrame =
     ## groupbyしたDataFrameに対して統計量を計算する.
     ## aggFnにはDataFrameの統計量を計算する関数を指定する.
     runnableExamples:
@@ -1103,15 +1105,20 @@ proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> DataFrame): DataFrame =
     ##
 
     result = initDataFrame()
-    var dfs: seq[DataFrame] = @[]
+    #関数の適用
+    var rows: seq[Row] = @[]
     for mi in dfg.data.keys:
         #統計値の計算
-        var df = aggFn(dfg.data[mi])
+        var row = aggFn(dfg.data[mi])
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
-            df[colName] = @[colValue]
-        dfs.add(df)
-    result = concat(dfs = dfs)
+            row[colName] = colValue
+        rows.add(row)
+    #結合
+    for colName in rows[0].keys:
+        result[colName] = initSeries()
+    for row in rows:
+        result.add(row)
     result.indexCol = dfg.columns[0]
 
 proc count(dfg: DataFrameGroupBy): DataFrame =
@@ -1409,8 +1416,8 @@ proc toBe() =
     df.renameColumns({"time":"TIME","name":"NAME","sales":"SALES"}).show(true)
     #
     echo "stats################################"
-    df.mean().show(true)
-    df.max().show(true)
+    echo df.mean()
+    echo df.max()
     #
     echo "map################################"
     echo df["sales"].intMap(c => c*2)
@@ -1644,7 +1651,9 @@ proc toBe() =
     echo healthCheck(df_h)
     #
     echo "add################################"
-    df.add({"time":"a","name":"b","sales":"c","_idx_":"d", "日本語":"e"}).show(true)
+    var df2 = df.deepCopy()
+    df2.add({"time":"a","name":"b","sales":"c","_idx_":"d", "日本語":"e"})
+    df2.show(true)
     #[
     ]#
 
