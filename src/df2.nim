@@ -161,11 +161,16 @@ proc initDataFrameGroupBy(): DataFrameGroupBy =
 
 
 proc len(df: DataFrame): int =
+    ## DataFrameの長さを返す
+    ## no healthCheck
+    result = df.data[df.indexCol].len
+    #[
     result = max(
         collect(newSeq) do:
             for colName in df.columns:
                 df[colName].len
     )
+    ]#
 
 proc addRow(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
     var columns: seq[ColName] = @[]
@@ -312,6 +317,9 @@ proc addRows[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInde
             raise newException(NimDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
     else:
         raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
+
+proc addColumns[T](df: var DataFrame, columns: openArray[(CellName, seq[T])]) =
+
 
 proc deepCopy(df: DataFrame): DataFrame =
     result = initDataFrame(df)
