@@ -30,6 +30,10 @@ type DataFrameResample = object
     data: DataFrame
     window: string
     format: string
+type DataFrameRolling = object
+    data: DataFrame
+    window: string
+    format: string
 
 
 ###############################################################
@@ -1248,50 +1252,52 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
         elif matches[1] != "" and matches[0] != "":
             let datetimeId = matches[1]
             let w = matches[0].parseInt()
+            #datetimeIdが不正な場合、エラー
+            if not ["Y","m","d","H","M","S"].contains(datetimeId):
+                raise newException(NimDataFrameError, fmt"invalid datetime ID '{datetimeId}'")
+            #インデックスがdatetimeフォーマットでない場合、エラー
+            if not isDatetimeSeries(dfre.data[dfre.data.indexCol]):
+                raise newException(NimDataFrameError, "index column isn't datetime format")
             #インデックスがdatetimeフォーマットに準拠している場合
-            if isDatetimeSeries(dfre.data[dfre.data.indexCol]):
-                let datetimes = dfre.data[dfre.data.indexCol].toDatetime()
-                let getInterval = genGetInterval(datetimeId)
-                let startDatetime = flattenDatetime(datetimes[0], datetimeId)
-                var startIndex = 0
-                var interval = w
-                var index: seq[DateTime] = @[]
-                when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                    var dfs: seq[DataFrame] = @[]
-                #DateTime型に変換したindexを上から順にみていく
-                result.indexCol = dfre.data.indexCol
-                when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
-                    for (colName, _) in fn:
-                        result[colName] = initSeries()
-                else:
-                    for colName in dfre.data.columns:
-                        result[colName] = initSeries()
-                for i, dt in datetimes.pairs():
-                    #範囲外になった場合、集計
-                    if startDatetime + getInterval(interval) <= dt:
-                        var slice = startIndex..<i
-                        if slice.b >= dfre.data.len:
-                            slice.b = dfre.data.len-1
-                            
-                        body
-
-                        index.add(startDatetime + getInterval(interval-w))
-                        startIndex = i
-                        interval += w
-                #window刻みの余り分の処理
-                if startIndex < dfre.data.len-1:
-                    var slice = startIndex..<dfre.data.len
-                    
+            let datetimes = dfre.data[dfre.data.indexCol].toDatetime()
+            let getInterval = genGetInterval(datetimeId)
+            let startDatetime = flattenDatetime(datetimes[0], datetimeId)
+            var startIndex = 0
+            var interval = w
+            var index: seq[DateTime] = @[]
+            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
+                var dfs: seq[DataFrame] = @[]
+            #DateTime型に変換したindexを上から順にみていく
+            result.indexCol = dfre.data.indexCol
+            when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
+                for (colName, _) in fn:
+                    result[colName] = initSeries()
+            else:
+                for colName in dfre.data.columns:
+                    result[colName] = initSeries()
+            for i, dt in datetimes.pairs():
+                #範囲外になった場合、集計
+                if startDatetime + getInterval(interval) <= dt:
+                    var slice = startIndex..<i
+                    if slice.b >= dfre.data.len:
+                        slice.b = dfre.data.len-1
+                        
                     body
 
                     index.add(startDatetime + getInterval(interval-w))
-                when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                    result = concat(dfs = dfs)
-                    result.indexCol = dfre.data.indexCol
-                result[dfre.data.indexCol] = index
-            #インデックスがdatetimeフォーマットでない場合
-            else:
-                raise newException(NimDataFrameError, "index column isn't datetime format")
+                    startIndex = i
+                    interval += w
+            #window刻みの余り分の処理
+            if startIndex < dfre.data.len-1:
+                var slice = startIndex..<dfre.data.len
+                
+                body
+
+                index.add(startDatetime + getInterval(interval-w))
+            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
+                result = concat(dfs = dfs)
+                result.indexCol = dfre.data.indexCol
+            result[dfre.data.indexCol] = index
         #指定フォーマットでない場合
         else:
             raise newException(NimDataFrameError, "invalid datetime format")
@@ -1367,6 +1373,135 @@ proc apply[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): DataF
             df2[colName] = @[c.parseString()]
         dfs.add(df2)
 
+
+###############################################################
+proc rolling(df: DataFrame, window: int, format=defaultDateTimeFormat): DataFrameRolling =
+    ## DataFrameを指定の行数でリサンプルする（戻り値はDataFrameRolling型）.
+    ##
+
+    result.data = df
+    result.window = $window
+    result.format = format
+
+proc rolling(df: DataFrame, window: string, format=defaultDateTimeFormat): DataFrameRolling =
+    result.data = df
+    result.window = window
+    result.format = format
+
+template rollingAggTemplate(body: untyped): untyped{.dirty.} =
+    result = initDataFrame()
+    #数字指定かdatetime指定か判断する
+    var matches: array[2, string]
+    if match(dfro.window, re"(\d+)([a-zA-Z]+)?", matches):
+        #数字のみ（行数指定）の場合
+        if matches[1] == "" and matches[0] != "":
+            let w = matches[0].parseInt()
+            #各行をwindowブロック毎に処理する
+            when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
+                for (colName, _) in fn:
+                    result[colName] = initSeries()
+            else:
+                for colName in dfro.data.columns:
+                    result[colName] = initSeries()
+            var index: seq[Cell] = @[]
+            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
+                var dfs: seq[DataFrame] = @[]
+            for colName in result.columns:
+                for i in 0..<w-1:
+                    result.data[colName].add(dfEmpty)
+            for i in 0..<w-1:
+                index.add(dfro.data[dfro.data.indexCol][i])
+            for i in 0..<dfro.data.len-w:
+                var slice = i..<i+w
+                if slice.b >= dfro.data.len:
+                    slice.b = dfro.data.len-1
+                    
+                body
+
+                index.add(dfro.data[dfro.data.indexCol][i])
+            result.indexCol = dfro.data.indexCol
+            result.data[dfro.data.indexCol] = index
+        #datetime範囲指定の場合
+        elif matches[1] != "" and matches[0] != "":
+            let datetimeId = matches[1]
+            let w = matches[0].parseInt()
+            #datetimeIdが不正な場合、エラー
+            if not ["Y","m","d","H","M","S"].contains(datetimeId):
+                raise newException(NimDataFrameError, fmt"invalid datetime ID '{datetimeId}'")
+            #インデックスがdatetimeフォーマットでない場合、エラー
+            if not isDatetimeSeries(dfro.data[dfro.data.indexCol]):
+                raise newException(NimDataFrameError, "index column isn't datetime format")
+            let datetimes = dfro.data[dfro.data.indexCol].toDatetime()
+            let getInterval = genGetInterval(datetimeId)
+            let startDatetime = flattenDatetime(datetimes[0], datetimeId)
+            var startIndex = 0
+            var interval = w
+            var index: seq[DateTime] = @[]
+            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
+                var dfs: seq[DataFrame] = @[]
+            #DateTime型に変換したindexを上から順にみていく
+            when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
+                for (colName, _) in fn:
+                    result[colName] = initSeries()
+            else:
+                for colName in dfro.data.columns:
+                    result[colName] = initSeries()
+            #let timeInterval = getInterval(w)
+            for i, dt in datetimes.pairs():
+                #範囲内を集計
+                var slice = 0..<i
+                for j, dt2 in datetimes.pairs():
+                    if j > i:
+                        break
+                    if dt2 < dt - getInterval(w):
+                        slice.a = j
+                    elif dt2 >= dt:
+                        slice.b = j
+                        break
+                echo slice
+                        
+                body
+
+                index.add(dt)
+            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
+                result = concat(dfs = dfs)
+                result.indexCol = dfro.data.indexCol
+            result.indexCol = dfro.data.indexCol
+            result[dfro.data.indexCol] = index
+        #指定フォーマットでない場合
+        else:
+            raise newException(NimDataFrameError, "invalid datetime format")
+    #指定フォーマットにひっからなかった場合（エラー）
+    else:
+        raise newException(NimDataFrameError, "invalid datetime format")
+
+proc agg[T](dfro: DataFrameRolling, fn: openArray[(ColName, Series -> T)]): DataFrame =
+    ## リサンプルされたDataFrameの各グループの指定列に対して関数fnを適用する
+    ## 指定する関数に{.closure.}オプションをつけないとエラーになる.
+    runnableExamples:
+        proc f(s: Series): float{.closure.} =
+            sum(s)*100
+        df.resample("30M").agg({"sales": f})
+    ##
+
+    rollingAggTemplate:
+        for (colName, f) in fn:
+            result.data[colName].add(f(dfro.data[colName][slice]).parseString())
+
+proc agg[T](dfro: DataFrameRolling, fn: Series -> T): DataFrame =
+    ## リサンプルされたDataFrameの各グループの全列に対して関数fnを適用する
+    runnableExamples:
+        df.resample("30M").agg(mean)
+    ##
+
+    rollingAggTemplate:
+        for colName in result.columns:
+            result.data[colName].add(fn(dfro.data[colName][slice]).parseString())
+
+proc count(dfro: DataFrameRolling): DataFrame =
+    dfro.agg(count)
+proc sum(dfro: DataFrameRolling): DataFrame =
+    dfro.agg(sum)
 
 ###############################################################
 ###############################################################
@@ -1478,7 +1613,7 @@ proc toBe() =
     echo "groupby agg################################"
     proc aggFnG(s: Series): float {.closure.} =
         result = s.toFloat().mean()/100
-    echo df.groupby(["time","name"]).agg({"sales": aggFnG})
+    df.groupby(["time","name"]).agg({"sales": aggFnG}).show(true)
     #
     echo "groupby apply################################"
     proc applyFnG(df: DataFrame): Table[ColName,Cell] =
@@ -1654,6 +1789,14 @@ proc toBe() =
     var df2 = df.deepCopy()
     df2.add({"time":"a","name":"b","sales":"c","_idx_":"d", "日本語":"e"})
     df2.show(true)
+    #
+    echo "rolling count(1)################################"
+    echo df.setIndex("time").rolling(5).count()
+    df.setIndex("time").rolling(5).sum().show(true)
+    #
+    echo "rolling count(2)################################"
+    df.setIndex("time").rolling("1d").count().show(true)
+    df.setIndex("time").rolling("1d").sum().show(true)
     #[
     ]#
 

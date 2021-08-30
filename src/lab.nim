@@ -27,3 +27,14 @@ echo false.ord
 
 for i in 0..<0:
     echo i
+
+type AA = enum
+    aa = "a"
+    bb = "b"
+
+proc f(a: string) =
+    case a:
+        of aa:   echo "aaa"
+        of bb:   echo "bbb"
+
+f("b")
