@@ -1433,9 +1433,6 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
                 raise newException(NimDataFrameError, "index column isn't datetime format")
             let datetimes = dfro.data[dfro.data.indexCol].toDatetime()
             let getInterval = genGetInterval(datetimeId)
-            let startDatetime = flattenDatetime(datetimes[0], datetimeId)
-            var startIndex = 0
-            var interval = w
             var index: seq[DateTime] = @[]
             when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
                 var dfs: seq[DataFrame] = @[]
@@ -1446,17 +1443,14 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
             else:
                 for colName in dfro.data.columns:
                     result[colName] = initSeries()
-            #let timeInterval = getInterval(w)
+            let timeInterval = getInterval(w)
             for i, dt in datetimes.pairs():
                 #範囲内を集計
-                var slice = 0..<i
+                var slice = 0..i
                 for j, dt2 in datetimes.pairs():
+                    if dt2 <= dt - timeInterval:
+                        slice.a = j + 1
                     if j > i:
-                        break
-                    if dt2 < dt - getInterval(w):
-                        slice.a = j
-                    elif dt2 >= dt:
-                        slice.b = j
                         break
                 echo slice
                         
@@ -1476,12 +1470,12 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
         raise newException(NimDataFrameError, "invalid datetime format")
 
 proc agg[T](dfro: DataFrameRolling, fn: openArray[(ColName, Series -> T)]): DataFrame =
-    ## リサンプルされたDataFrameの各グループの指定列に対して関数fnを適用する
+    ## rollingされたDataFrameの各グループの指定列に対して関数fnを適用する
     ## 指定する関数に{.closure.}オプションをつけないとエラーになる.
     runnableExamples:
         proc f(s: Series): float{.closure.} =
             sum(s)*100
-        df.resample("30M").agg({"sales": f})
+        df.rolling("30M").agg({"sales": f})
     ##
 
     rollingAggTemplate:
@@ -1489,7 +1483,7 @@ proc agg[T](dfro: DataFrameRolling, fn: openArray[(ColName, Series -> T)]): Data
             result.data[colName].add(f(dfro.data[colName][slice]).parseString())
 
 proc agg[T](dfro: DataFrameRolling, fn: Series -> T): DataFrame =
-    ## リサンプルされたDataFrameの各グループの全列に対して関数fnを適用する
+    ## rollingされたDataFrameの各グループの全列に対して関数fnを適用する
     runnableExamples:
         df.resample("30M").agg(mean)
     ##
@@ -1502,6 +1496,44 @@ proc count(dfro: DataFrameRolling): DataFrame =
     dfro.agg(count)
 proc sum(dfro: DataFrameRolling): DataFrame =
     dfro.agg(sum)
+proc mean(dfro: DataFrameRolling): DataFrame =
+    dfro.agg(mean)
+proc max(dfro: DataFrameRolling): DataFrame =
+    dfro.agg(max)
+proc min(dfro: DataFrameRolling): DataFrame =
+    dfro.agg(min)
+proc v(dfro: DataFrameRolling): DataFrame =
+    dfro.agg(v)
+
+proc apply[T](dfro: DataFrameRolling, fn: DataFrame -> Table[ColName,T]): DataFrame =
+    ## rollingされたDataFrameの各グループのDataFrameに対して関数fnを適用する
+    ## 関数fnはTableを返すことに注意.
+    runnableExamples:
+        proc f(df: DataFrame): Table[ColName,Cell] =
+            var cell: Cell
+            if df["col2"][0] == "abc":
+                cell = df["col3"].intMap(c => c/10).mean()
+            else:
+                cell = df["col3"].intMap(c => c*10).mean()
+            result = {
+                "col3_changed": cell
+            }.toTable()
+        df.resample("30M").apply(f)
+    ##
+
+    rollingAggTemplate:
+        #applyFnに渡すDataFrame作成
+        var df1 = initDataFrame(dfro.data)
+        if slice.b >= dfro.data.len:
+            slice.b = dfro.data.len-1
+        for colName in result.columns:
+            df1[colName] = dfro.data[colName][slice]
+        #applyFn適用
+        var applyTable = fn(df1)
+        var df2 = initDataFrame()
+        for (colName, c) in applyTable.pairs():
+            df2[colName] = @[c.parseString()]
+        dfs.add(df2)
 
 ###############################################################
 ###############################################################
@@ -1790,13 +1822,16 @@ proc toBe() =
     df2.add({"time":"a","name":"b","sales":"c","_idx_":"d", "日本語":"e"})
     df2.show(true)
     #
-    echo "rolling count(1)################################"
+    echo "rolling agg(1)################################"
     echo df.setIndex("time").rolling(5).count()
     df.setIndex("time").rolling(5).sum().show(true)
     #
-    echo "rolling count(2)################################"
-    df.setIndex("time").rolling("1d").count().show(true)
-    df.setIndex("time").rolling("1d").sum().show(true)
+    echo "rolling agg(2)################################"
+    df.setIndex("time").rolling("1H").count().show(true)
+    df.setIndex("time").rolling("1H").sum().show(true)
+    #
+    echo "resaple 30M apply################################"
+    df.setIndex("time").rolling("30M").apply(applyFnG).show(true)
     #[
     ]#
 
