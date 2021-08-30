@@ -439,6 +439,14 @@ proc shape(df: DataFrame): (int,int) =
     let rowNumber = df.len
     result = (rowNumber, colNumber)
 
+proc size(df: DataFrame, excludeIndex=false): int =
+    result = df.len * (
+        if excludeIndex:
+            df.getColumns().len - 1
+        else:
+            df.getColumns().len
+    )
+
 proc healthCheck(df: DataFrame, raiseException=false): bool{.discardable.} =
     #indexColチェック
     if not df.getColumns().contains(df.indexCol):
@@ -2096,6 +2104,10 @@ proc toBe() =
         fillEmpty = true
     )
     df2.show(true)
+    #
+    echo "size################################"
+    echo df2.size()
+    echo df2.size(true)
     #[
     ]#
 
