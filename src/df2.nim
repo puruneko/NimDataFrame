@@ -1045,6 +1045,33 @@ proc dropDuplicates(df: DataFrame, colNames: openArray[ColName] = []): DataFrame
     ##
     df.drop(df.duplicated(colNames))
 
+proc transpose(df: DataFrame): DataFrame =
+    result = initDataFrame()
+    #indexに重複がある場合、エラー
+    if df.duplicated().contains(true):
+        raise newException(NimDataFrameError, "duplicate indexes are not allowed in transpose action")
+    #転置処理
+    let columns = df.getColumns()
+    let colNameTable =
+        collect(initTable):
+            for i, colName in columns.pairs():
+                {i: colName}
+    for indexValue in df[df.indexCol]:
+        result[indexValue] = initSeries()
+        let dfRow = df.loc(indexValue)
+        for i in 0..<columns.len:
+            if colNameTable[i] == df.indexCol:
+                continue
+            result.data[indexValue].add(dfRow[colNameTable[i]][0])
+    result[result.indexCol] =
+        collect(newSeq):
+            for colName in columns:
+                if colName == df.indexCol:
+                    continue
+                colName
+
+proc T(df: DataFrame): DataFrame =
+    df.transpose()
 
 ###############################################################
 proc groupby(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
@@ -1832,6 +1859,10 @@ proc toBe() =
     #
     echo "resaple 30M apply################################"
     df.setIndex("time").rolling("30M").apply(applyFnG).show(true)
+    #
+    echo "transpose################################"
+    df_j1.show(true)
+    df_j1.transpose().show(true)
     #[
     ]#
 
