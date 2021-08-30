@@ -167,20 +167,151 @@ proc len(df: DataFrame): int =
                 df[colName].len
     )
 
-proc add(df: var DataFrame, row: Row) =
+proc addRow(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
     var columns: seq[ColName] = @[]
     for colName in row.keys:
         columns.add(colName)
     let columnsHash = toHashSet(columns)
     let dfColumnsHash = toHashSet(df.getColumns())
-    if dfColumnsHash == columnsHash:
+    if dfColumnsHash == columnsHash or
+        fillEmpty or
+        (autoIndex and dfColumnsHash - toHashSet([df.indexCol]) == columnsHash):
         for colName in dfColumnsHash:
-            df.data[colName].add(row[colName])
+            #fillEmptyフラグ無し
+            if not fillEmpty:
+                #autoIndexフラグ無し
+                if not autoIndex:
+                    df.data[colName].add(row[colName])
+                #autoIndexフラグあり
+                else:
+                    if colName == df.indexCol:
+                        df.data[colName].add($(df.len))
+                    else:
+                        df.data[colName].add(row[colName])
+            #fillEmptyフラグあり
+            else:
+                #autoIndexフラグ無し
+                if not autoIndex:
+                    if columnsHash.contains(colName):
+                        df.data[colName].add(row[colName])
+                    else:
+                        df.data[colName].add(dfEmpty)
+                #autoIndexフラグあり
+                else:
+                    if colName == df.indexCol:
+                        df.data[colName].add($(df.len))
+                    else:
+                        if columnsHash.contains(colName):
+                            df.data[colName].add(row[colName])
+                        else:
+                            df.data[colName].add(dfEmpty)
     else:
         raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
 
-proc add(df: var DataFrame, row: openArray[(ColName, Cell)]) =
-    df.add(row.toTable())
+proc addRow[T](df: var DataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false) =
+    var newRow: Row
+    for (colName, value) in row:
+        newRow[colName] = value.parseString()
+    df.addRow(newRow, autoIndex, fillEmpty)
+
+proc addRows[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false) =
+    ##
+    runnableExamples:
+        var df = toDataFrame(
+            columns = {
+                "a": @[1,2,3,4],
+                "b": @[10,20,30,40],
+                "c": @[100,200,300,400],
+            },
+            indexCol = "a",
+        )
+        df.addRow(
+            items = {
+                "b": @[50,60],
+                "c": @[500]
+            },
+            autoIndex=true,
+            fillEmptyRow=true,
+            fillEmptyCol=true,
+        )
+    ##
+
+    let itemTable = items.toTable()
+    var columns: seq[ColName] = @[]
+    var lengths: seq[int] = @[]
+    for (colName, s) in itemTable.pairs():
+        columns.add(colName)
+        lengths.add(s.len)
+    let columnsHash = toHashSet(columns)
+    let dfColumnsHash = toHashSet(df.getColumns())
+    let lengthsHash = toHashSet(lengths)
+    let length = max(toHashSet(lengths).toSeq())
+    let dfLength = df.len
+    if dfColumnsHash == columnsHash or
+        fillEmptyCol or
+        (autoIndex and dfColumnsHash - toHashSet([df.indexCol]) == columnsHash):
+        if lengthsHash.len == 1 or fillEmptyRow:
+            for colName in dfColumnsHash:
+                #fillEmptyColフラグあり
+                if fillEmptyCol:
+                    #fillEmptyRowフラグあり
+                    if fillEmptyRow:
+                        #autoIndexフラグあり、かつ、colNameがindexCol
+                        if autoIndex and colName == df.indexCol:
+                            for i in 0..<length:
+                                df.data[colName].add($(dfLength+i))
+                        else:
+                            #列名がない場合
+                            if not columnsHash.contains(colName):
+                                for i in 0..<length:
+                                    df.data[colName].add(dfEmpty)
+                            #列名がある場合
+                            else:
+                                for c in itemTable[colName]:
+                                    df.data[colName].add(c.parseString())
+                                for i in itemTable[colName].len..<length:
+                                    df.data[colName].add(dfEmpty)
+                    #fillEmptyRowフラグ無し
+                    else:
+                        #autoIndexフラグあり、かつ、colNameがindexCol
+                        if autoIndex and colName == df.indexCol:
+                            for i in 0..<length:
+                                df.data[colName].add($(dfLength+i))
+                        else:
+                            #列名がない場合
+                            if not columnsHash.contains(colName):
+                                for i in 0..<length:
+                                    df.data[colName].add(dfEmpty)
+                            #列名がある場合
+                            else:
+                                for c in itemTable[colName]:
+                                    df.data[colName].add(c.parseString())
+                #fillEmptyColフラグ無し
+                else:
+                    #fillEmptyRowフラグあり
+                    if fillEmptyRow:
+                        #autoIndexフラグあり、かつ、colNameがindexCol
+                        if autoIndex and colName == df.indexCol:
+                            for i in 0..<length:
+                                df.data[colName].add($(dfLength+i))
+                        else:
+                            for c in itemTable[colName]:
+                                df.data[colName].add(c.parseString())
+                            for i in itemTable[colName].len..<length:
+                                df.data[colName].add(dfEmpty)
+                    #fillEmptyRowフラグ無し
+                    else:
+                        #autoIndexフラグあり、かつ、colNameがindexCol
+                        if autoIndex and colName == df.indexCol:
+                            for i in 0..<length:
+                                df.data[colName].add($(dfLength+i))
+                        else:
+                            for c in itemTable[colName]:
+                                df.data[colName].add(c.parseString())
+        else:
+            raise newException(NimDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
+    else:
+        raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
 
 proc deepCopy(df: DataFrame): DataFrame =
     result = initDataFrame(df)
@@ -941,6 +1072,20 @@ proc floatMap[T](s: Series, fn: float -> T): Series =
 proc datetimeMap[T](s: Series, fn: DateTime -> T, format=defaultDateTimeFormat): Series =
     map(s, fn, genParseDatetime(format))
 
+proc replace(df: DataFrame, sub: string, by: string): DataFrame =
+    result = initDataFrame(df)
+    proc f(c: Cell): Cell =
+        c.replace(sub, by)
+    for colName in df.columns:
+        result[colName] = df[colName].map(f)
+
+proc replace(df: DataFrame, sub: Regex, by: string): DataFrame =
+    result = initDataFrame(df)
+    proc f(c: Cell): Cell =
+        c.replacef(sub, by)
+    for colName in df.columns:
+        result[colName] = df[colName].map(f)
+
 
 ###############################################################
 proc filter(df: DataFrame, fltr: Row -> bool): DataFrame =
@@ -1125,7 +1270,7 @@ proc agg[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): Data
     for colName in rows[0].keys:
         result[colName] = initSeries()
     for row in rows:
-        result.add(row)
+        result.addRow(row)
     result.indexCol = dfg.columns[0]
 
 proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> Row): DataFrame =
@@ -1149,7 +1294,7 @@ proc agg(dfg: DataFrameGroupBy, aggFn: DataFrame -> Row): DataFrame =
     for colName in rows[0].keys:
         result[colName] = initSeries()
     for row in rows:
-        result.add(row)
+        result.addRow(row)
     result.indexCol = dfg.columns[0]
 
 proc count(dfg: DataFrameGroupBy): DataFrame =
@@ -1844,11 +1989,6 @@ proc toBe() =
     df_h.indexCol = "c"
     echo healthCheck(df_h)
     #
-    echo "add################################"
-    var df2 = df.deepCopy()
-    df2.add({"time":"a","name":"b","sales":"c","_idx_":"d", "日本語":"e"})
-    df2.show(true)
-    #
     echo "rolling agg(1)################################"
     echo df.setIndex("time").rolling(5).count()
     df.setIndex("time").rolling(5).sum().show(true)
@@ -1863,6 +2003,43 @@ proc toBe() =
     echo "transpose################################"
     df_j1.show(true)
     df_j1.transpose().show(true)
+    #
+    echo "replace(1)################################"
+    df.replace("abc", "ABC").show(true)
+    #
+    echo "replace(2)################################"
+    df.replace(re"(\d\d)", "@$1@").show(true)
+    #
+    echo "addRow################################"
+    var df2 = toDataFrame(
+        columns = {
+            "a": @[1,2],
+            "b": @[3,4],
+            "c": @[10,20],
+            "d": @[100,200]
+        },
+        indexCol = "a",
+    )
+    df2.addRow({"a": 3, "b": 5, "c": 30, "d": 300})
+    df2.show(true)
+    df2.addRow({"a": 4}, fillEmpty=true)
+    df2.show(true)
+    df2.addRow({"b": 7, "c": 50, "d": 500}, autoIndex=true)
+    df2.show(true)
+    df2.addRow({"c": 60}, autoIndex=true, fillEmpty=true)
+    df2.show(true)
+    #
+    echo "addRows################################"
+    df2.addRows(
+        items = {
+            "b": @[9,10],
+            "c": @[70]
+        },
+        autoIndex=true,
+        fillEmptyRow=true,
+        fillEmptyCol=true,
+    )
+    df2.show(true)
     #[
     ]#
 
