@@ -29,3 +29,5 @@ for i in 0..<0:
     echo i
 
 echo "aaa".replace("c", "b")
+
+echo toHashSet([1])

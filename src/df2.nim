@@ -318,8 +318,37 @@ proc addRows[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInde
     else:
         raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
 
-proc addColumns[T](df: var DataFrame, columns: openArray[(CellName, seq[T])]) =
-
+proc addColumns[T](df: var DataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false) =
+    let columnTable = columns.toTable()
+    var lengths: seq[int] = @[]
+    for (colName, s) in columnTable.pairs():
+        lengths.add(s.len)
+    let lengthHash = toHashSet(lengths)
+    let colLength = lengthHash.toSeq()[0]
+    let dfLength = df.len
+    #すべての長さが一致していた場合
+    if lengthHash.len == 1 and
+        ((fillEmpty and colLength <= dfLength) or (not fillEmpty and colLength == dfLength)):
+        for colName in columnTable.keys:
+            df[colName] = initSeries()
+        if fillEmpty:
+            for colName in columnTable.keys:
+                for i in 0..<dfLength:
+                    if i < colLength:
+                        df.data[colName].add(columnTable[colName][i].parseString())
+                    else:
+                        df.data[colName].add(dfEmpty)
+        else:
+            for colName in columnTable.keys:
+                for i in 0..<dfLength:
+                    df.data[colName].add(columnTable[colName][i].parseString())
+    else:
+        if lengthHash.len != 1:
+            raise newException(NimDataFrameError, "argument 'columns' must be same length")
+        elif fillEmpty:
+            raise newException(NimDataFrameError, "each 'columns' must be shorter than length of DataFrame")
+        else:
+            raise newException(NimDataFrameError, "length of 'columns' must be the same as length of DataFrame")
 
 proc deepCopy(df: DataFrame): DataFrame =
     result = initDataFrame(df)
@@ -2046,6 +2075,25 @@ proc toBe() =
         autoIndex=true,
         fillEmptyRow=true,
         fillEmptyCol=true,
+    )
+    df2.show(true)
+    #
+    echo "addColumns(1)################################"
+    df2.addColumns(
+        columns = {
+            "b": @[0,1,2,3,4,5,6,7],
+            "e": @[0,1,2,3,4,5,6,7],
+        }
+    )
+    df2.show(true)
+    #
+    echo "addColumns(2)################################"
+    df2.addColumns(
+        columns = {
+            "b": @[0,0,0,0,0,0,0],
+            "f": @[0,0,0,0,0,0,0],
+        },
+        fillEmpty = true
     )
     df2.show(true)
     #[
