@@ -1020,6 +1020,32 @@ proc `>=`(a: float, b: Cell): bool =
 proc `<=`(a: float, b: Cell): bool =
     result = a <= b.parseFloat()
 
+proc `==`[T](a: Series, b: T): FilterSeries =
+    let x = b.parseString()
+    result =
+        collect(newSeq):
+            for c in a:
+                c == x
+#[
+proc `!=`[T](a: Series, b: T): FilterSeries =
+    let x = b.parseString()
+    result =
+        collect(newSeq):
+            for c in a:
+                c != x
+proc `>`[T](a: Series, b: T): FilterSeries =
+    let x = b.parseString()
+    result =
+        collect(newSeq):
+            for c in a:
+                c != x
+proc `>`(a: Series, b: float): FilterSeries =
+    result =
+        collect(newSeq):
+            for c in a.toFloat():
+                c > b
+]#
+
 proc agg[T](s: Series, aggFn: Series -> T): Cell =
     ## SeriesをCellに変換する.
     ## aggFnにはSeriesをCell変換する関数を指定する.
