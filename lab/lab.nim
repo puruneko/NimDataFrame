@@ -31,3 +31,5 @@ for i in 0..<0:
 echo "aaa".replace("c", "b")
 
 echo toHashSet([1])
+
+echo "aaa" != "bbb"
