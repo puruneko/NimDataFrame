@@ -1020,30 +1020,43 @@ proc `>=`(a: float, b: Cell): bool =
 proc `<=`(a: float, b: Cell): bool =
     result = a <= b.parseFloat()
 
-proc `==`[T](a: Series, b: T): FilterSeries =
-    let x = b.parseString()
+proc `===`[T](a: Series, b: T): FilterSeries =
+    let bString = b.parseString()
     result =
         collect(newSeq):
             for c in a:
-                c == x
-#[
-proc `!=`[T](a: Series, b: T): FilterSeries =
-    let x = b.parseString()
+                c == bString
+proc `!==`[T](a: Series, b: T): FilterSeries =
+    let bString = b.parseString()
     result =
         collect(newSeq):
             for c in a:
-                c != x
+                c != bString
 proc `>`[T](a: Series, b: T): FilterSeries =
-    let x = b.parseString()
+    let bString = b.parseString()
     result =
         collect(newSeq):
             for c in a:
-                c != x
-proc `>`(a: Series, b: float): FilterSeries =
+                c > bString
+proc `<`[T](a: Series, b: T): FilterSeries =
+    let bString = b.parseString()
     result =
         collect(newSeq):
-            for c in a.toFloat():
-                c > b
+            for c in a:
+                c < bString
+proc `>=`[T](a: Series, b: T): FilterSeries =
+    let bString = b.parseString()
+    result =
+        collect(newSeq):
+            for c in a:
+                c >= bString
+proc `<=`[T](a: Series, b: T): FilterSeries =
+    let bString = b.parseString()
+    result =
+        collect(newSeq):
+            for c in a:
+                c <= bString
+#[
 ]#
 
 proc agg[T](s: Series, aggFn: Series -> T): Cell =
