@@ -120,7 +120,8 @@ proc `[]=`*[T](df: var DataFrame, colName: ColName, right: openArray[T]) =
         for c in right:
             c.parseString()
     df.data.del(colName)
-    df.data.add(colName, newSeries)
+    #df.data.add(colName, newSeries) #deprecated
+    df.data[colName] = newSeries
 
 
 proc initDataFrame*(): DataFrame =
