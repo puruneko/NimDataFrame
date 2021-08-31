@@ -9,6 +9,7 @@ import stats
 import sets
 import encodings
 import re
+import streams
 
 import nimdataframe/typedef as typedef
 export typedef
@@ -188,6 +189,11 @@ proc toCsv*(df: DataFrame, filename: string, encoding="utf-8") =
     defer: ec.close()
     fp.write(ec.convert(df.toCsv()))
 
+proc toCsv*(df: DataFrame, writableStrem: Stream, encoding="utf-8") =
+    let ec = open(encoding, "utf-8")
+    defer: ec.close()
+    writableStrem.write(ec.convert(df.toCsv()))
+
 proc toFigure*(df: DataFrame, indexColSign=false): string =
     result = ""
     #空のデータフレームの場合
@@ -235,5 +241,11 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
             result &= "\n"
         result &= "+" & "-".repeat(fullWidth-1) & "+"
 
-proc show*(df: DataFrame, indexColSign=false) =
-    echo df.toFigure(indexColSign)
+proc show*(df: DataFrame, indexColSign=false, writableStrem: Stream = nil) =
+    var stream: Stream
+    if writableStrem.isNil:
+        stream = newFileStream(stdout)
+    else:
+        stream = writableStrem
+    stream.writeLine( df.toFigure(indexColSign) )
+
