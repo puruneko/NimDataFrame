@@ -33,7 +33,7 @@ export checker
 ###############################################################
 proc toDataFrame*(
     text: string,
-    sep=",",
+    sep=',',
     headers: openArray[ColName],
     headerRows= 0,
     indexCol="",
@@ -43,7 +43,7 @@ proc toDataFrame*(
     runnableExamples:
         var df = toDataFrame(
             text=tsv,
-            sep="\t",
+            sep='\t',
             headers=["col1","col2","col3"],
             headerRows=1,
         )
@@ -58,14 +58,31 @@ proc toDataFrame*(
     defer: ec.close()
     let textConverted = ec.convert(text)
     #テキストデータの変換
-    let regex = fmt"("".+?""({sep}|\n|$)|(?<!"")[^{sep}""]*?({sep}|\n|$))"
-    let lines = textConverted.strip().splitLines()
-    for rowNumber, line in lines.pairs():
-        if rowNumber < headerRows:
+    var dQuoteFlag = false
+    var colNumber = 0
+    var lineCount = 1
+    var cell = ""
+    for i in 0..<textConverted.len:
+        if i != 0 and not dQuoteFlag and textConverted[i-1] == '\r' and textConverted[i] == '\n':
             continue
-        let cells = line.findAll(re(regex))
-        for (cell, colName) in zip(cells, headers):
-            result.data[colName].add(cell.strip(chars={',','"'}).strip())
+        elif not dQuoteFlag and (textConverted[i] == sep or textConverted[i] == '\n' or textConverted[i] == '\r'):
+            if lineCount > headerRows:
+                result.data[headers[colNumber]].add(cell)
+            cell = ""
+            colNumber += 1
+            if textConverted[i] == '\n' or textConverted[i] == '\r':
+                colNumber = 0
+                lineCount += 1
+        elif not dQuoteFlag and textConverted[i] == '"':
+            dQuoteFlag = true
+        elif dQuoteFlag and textConverted[i] == '"':
+            dQuoteFlag = false
+        else:
+            cell.add(textConverted[i])
+    if cell != "":
+        if lineCount > headerRows:
+            result.data[headers[colNumber]].add(cell)
+        cell = ""
     #インデックスの設定
     if indexCol != "":
         if result.getColumns().contains(indexCol):
@@ -75,7 +92,8 @@ proc toDataFrame*(
     else:
         result.data[defaultIndexName] =
             collect(newSeq):
-                for i in 0..<lines.len-headerRows: $i
+                for i in 0..<lineCount-headerRows: $i
+    result.healthCheck()
 
 proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], indexCol=""): DataFrame =
     ## 配列で表現されたデータ構造をDataFrameに変換する.
@@ -250,4 +268,3 @@ proc show*(df: DataFrame, indexColSign=false, writableStrem: Stream = nil) =
     else:
         stream = writableStrem
     stream.writeLine( df.toFigure(indexColSign) )
-

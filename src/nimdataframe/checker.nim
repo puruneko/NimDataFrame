@@ -15,7 +15,7 @@ proc healthCheck*(df: DataFrame, raiseException=false): bool{.discardable.} =
     for colName in df.columns:
         if df[colName].len != length:
             if raiseException:
-                raise newException(NimDataFrameError, fmt"series must all be same length")
+                raise newException(NimDataFrameError, fmt"series must all be same length ({colName})")
             return false
     return true
 

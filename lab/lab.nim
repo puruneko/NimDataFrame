@@ -35,10 +35,33 @@ echo toHashSet([1])
 
 echo "aaa" != "bbb"
 
-let sep = ","
-let regex = fmt"("".+?""({sep}|\n|$)|(?<!"")[^{sep}""]*?({sep}|\n|$))"
-let text = r",a,b,c,""あ,あ"""
-let ec = open("utf-8", "utf-8")
-let textConverted = ec.convert(text)
-ec.close()
-echo textConverted.split("\n")[0].findAll(re(regex))
+let text = """,a,b,c,"あ,
+い"
+,a,b,c,"あ,
+い"
+,a,b,c,"あ,
+い","う,え",お"""
+let sep = ','
+var dQuoteFlag = false
+var cells: seq[seq[string]] = @[]
+var cell = ""
+cells.add(@[])
+echo text[0] == 'c' and text[1] == '\r'
+for i in 0..<text.len:
+    if i != 0 and not dQuoteFlag and text[i-1] == '\r' and text[i] == '\n':
+        continue
+    elif not dQuoteFlag and (text[i] == sep or text[i] == '\n' or text[i] == '\r'):
+        cells[^1].add(cell)
+        cell = ""
+        if text[i] == '\n' or text[i] == '\r':
+            cells.add(@[])
+    elif not dQuoteFlag and text[i] == '"':
+        dQuoteFlag = true
+    elif dQuoteFlag and text[i] == '"':
+        dQuoteFlag = false
+    else:
+        cell.add(text[i])
+if cell != "":
+    cells[^1].add(cell)
+    cell = ""
+echo cells
