@@ -10,6 +10,7 @@ import sets
 import encodings
 import re
 import streams
+import parsecsv
 
 import nimdataframe/typedef as typedef
 export typedef
@@ -58,31 +59,17 @@ proc toDataFrame*(
     defer: ec.close()
     let textConverted = ec.convert(text)
     #テキストデータの変換
-    var dQuoteFlag = false
-    var colNumber = 0
-    var lineCount = 1
-    var cell = ""
-    for i in 0..<textConverted.len:
-        if i != 0 and not dQuoteFlag and textConverted[i-1] == '\r' and textConverted[i] == '\n':
+    var textStream = newStringStream(textConverted)
+    var parser: CsvParser
+    parser.open(textStream, "dummy.csv")
+    defer: parser.close()
+    var lineCount = 0
+    while parser.readRow():
+        lineCount += 1
+        if lineCount <= headerRows:
             continue
-        elif not dQuoteFlag and (textConverted[i] == sep or textConverted[i] == '\n' or textConverted[i] == '\r'):
-            if lineCount > headerRows:
-                result.data[headers[colNumber]].add(cell)
-            cell = ""
-            colNumber += 1
-            if textConverted[i] == '\n' or textConverted[i] == '\r':
-                colNumber = 0
-                lineCount += 1
-        elif not dQuoteFlag and textConverted[i] == '"':
-            dQuoteFlag = true
-        elif dQuoteFlag and textConverted[i] == '"':
-            dQuoteFlag = false
-        else:
-            cell.add(textConverted[i])
-    if cell != "":
-        if lineCount > headerRows:
-            result.data[headers[colNumber]].add(cell)
-        cell = ""
+        for (colName, cell) in zip(headers, parser.row):
+            result.data[colName].add(cell)
     #インデックスの設定
     if indexCol != "":
         if result.getColumns().contains(indexCol):

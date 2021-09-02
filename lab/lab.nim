@@ -38,7 +38,8 @@ echo "aaa" != "bbb"
 let text = """,a,b,c,"あ,
 い"
 ,a,b,c,"あ,
-い"
+い
+う",え
 ,a,b,c,"あ,
 い","う,え",お"""
 let sep = ','
@@ -46,7 +47,6 @@ var dQuoteFlag = false
 var cells: seq[seq[string]] = @[]
 var cell = ""
 cells.add(@[])
-echo text[0] == 'c' and text[1] == '\r'
 for i in 0..<text.len:
     if i != 0 and not dQuoteFlag and text[i-1] == '\r' and text[i] == '\n':
         continue
