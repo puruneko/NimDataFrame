@@ -23,14 +23,21 @@ proc toBe*() =
         quit(fmt"{filename} open failed.")
     let csv = fp.readAll()
     #
-    echo "df################################"
+    echo "df (1)################################"
     var df = toDataFrame(
         text=csv,
-        headers=["time","name","sales","日本語"],
+        headers=["time","name","sales","日本語","dummy"],
         headerRows=1,
     )
     df.show(true)
     #df.toCsv("test.csv")
+    #
+    echo "df (2)################################"
+    df = toDataFrame(
+        text=csv,
+        headerLineNumber=1,
+    )
+    df.show(true)
     #
     echo "dropEmpty################################"
     df.dropEmpty().show(true)

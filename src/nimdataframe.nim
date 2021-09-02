@@ -32,6 +32,38 @@ export checker
 
 
 ###############################################################
+proc genCsvRowIterator(csv: string, sep=',', skipRows=0): iterator =
+    result =
+        iterator (): seq[string] =
+            var dQuoteFlag = false
+            var colNumber = 0
+            var lineCount = 1
+            var cell = ""
+            var row: seq[string] = @[]
+            for i in 0..<csv.len:
+                if i != 0 and not dQuoteFlag and csv[i-1] == '\r' and csv[i] == '\n':
+                    continue
+                elif not dQuoteFlag and (csv[i] == sep or csv[i] == '\n' or csv[i] == '\r'):
+                    if lineCount > skipRows:
+                        row.add(cell)
+                    cell = ""
+                    colNumber += 1
+                    if csv[i] == '\n' or csv[i] == '\r':
+                        if lineCount > skipRows:
+                            yield row
+                        row = @[]
+                        colNumber = 0
+                        lineCount += 1
+                elif not dQuoteFlag and csv[i] == '"':
+                    dQuoteFlag = true
+                elif dQuoteFlag and csv[i] == '"':
+                    dQuoteFlag = false
+                else:
+                    cell.add(csv[i])
+            #最後の要素を追加
+            row.add(cell)
+            yield row
+
 proc toDataFrame*(
     text: string,
     sep=',',
@@ -49,31 +81,22 @@ proc toDataFrame*(
             headerRows=1,
         )
     ##
-
-    #初期化
     result = initDataFrame()
     for colName in headers:
-        result.data[colName] = initSeries()
+        result[colName] = initSeries()
     #エンコード変換
     let ec = open("utf-8", encoding)
     defer: ec.close()
     let textConverted = ec.convert(text)
     #テキストデータの変換
-    var textStream = newStringStream(textConverted)
-    defer: textStream.close()
-    var parser: CsvParser
-    parser.open(textStream, "dummy.csv")
-    defer: parser.close()
+    let getRowItr = genCsvRowIterator(textConverted, sep, headerRows)
     var lineCount = 0
-    while parser.readRow():
+    for row in getRowItr:
+        if row.len != headers.len:
+            raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len}")
+        for (item, colName) in zip(row, headers):
+            result.data[colName].add(item)
         lineCount += 1
-        if lineCount <= headerRows:
-            continue
-        let row = parser.row
-        if headers.len != row.len:
-            raise newException(ValueError, fmt"ERROR:({lineCount}) {row}")
-        for (colName, cell) in zip(headers, parser.row):
-            result.data[colName].add(cell)
     #インデックスの設定
     if indexCol != "":
         if result.getColumns().contains(indexCol):
@@ -83,7 +106,55 @@ proc toDataFrame*(
     else:
         result.data[defaultIndexName] =
             collect(newSeq):
-                for i in 0..<lineCount-headerRows: $i
+                for i in 0..<lineCount: $i
+    result.healthCheck(raiseException=true)
+
+proc toDataFrame*(
+    text: string,
+    sep=',',
+    headerLineNumber=1,
+    indexCol="",
+    encoding="utf-8"
+): DataFrame =
+    ## テキストで表現されたデータ構造をDataFrameに変換する.
+    runnableExamples:
+        var df = toDataFrame(
+            text=tsv,
+            sep='\t',
+            headers=["col1","col2","col3"],
+            headerRows=1,
+        )
+    ##
+    result = initDataFrame()
+    #エンコード変換
+    let ec = open("utf-8", encoding)
+    defer: ec.close()
+    let textConverted = ec.convert(text)
+    #ヘッダーの取得
+    let getRowItr = genCsvRowIterator(textConverted, sep)
+    var headers: seq[string]
+    for i in 0..<headerLineNumber:
+        headers = getRowItr()
+    for colName in headers:
+        result[colName] = initSeries()
+    #テキストデータの変換
+    var lineCount = 0
+    for row in getRowItr:
+        if row.len != headers.len:
+            raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len}")
+        for (item, colName) in zip(row, headers):
+            result.data[colName].add(item)
+        lineCount += 1
+    #インデックスの設定
+    if indexCol != "":
+        if result.getColumns().contains(indexCol):
+            result.indexCol = indexCol
+        else:
+            raise newException(NimDataFrameError, fmt"not found {indexCol}")
+    else:
+        result.data[defaultIndexName] =
+            collect(newSeq):
+                for i in 0..<lineCount: $i
     result.healthCheck(raiseException=true)
 
 proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], indexCol=""): DataFrame =
