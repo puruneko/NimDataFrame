@@ -60,6 +60,7 @@ proc toDataFrame*(
     let textConverted = ec.convert(text)
     #テキストデータの変換
     var textStream = newStringStream(textConverted)
+    defer: textStream.close()
     var parser: CsvParser
     parser.open(textStream, "dummy.csv")
     defer: parser.close()
@@ -68,6 +69,9 @@ proc toDataFrame*(
         lineCount += 1
         if lineCount <= headerRows:
             continue
+        let row = parser.row
+        if headers.len != row.len:
+            raise newException(ValueError, fmt"ERROR:({lineCount}) {row}")
         for (colName, cell) in zip(headers, parser.row):
             result.data[colName].add(cell)
     #インデックスの設定
@@ -80,7 +84,7 @@ proc toDataFrame*(
         result.data[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<lineCount-headerRows: $i
-    result.healthCheck()
+    result.healthCheck(raiseException=true)
 
 proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], indexCol=""): DataFrame =
     ## 配列で表現されたデータ構造をDataFrameに変換する.
