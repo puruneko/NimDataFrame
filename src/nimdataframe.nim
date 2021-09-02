@@ -58,12 +58,14 @@ proc toDataFrame*(
     defer: ec.close()
     let textConverted = ec.convert(text)
     #テキストデータの変換
-    let lines = textConverted.strip().split("\n")
+    let regex = fmt"("".+?""({sep}|\n|$)|(?<!"")[^{sep}""]*?({sep}|\n|$))"
+    let lines = textConverted.strip().splitLines()
     for rowNumber, line in lines.pairs():
         if rowNumber < headerRows:
             continue
-        for (cell, colName) in zip(line.split(sep), headers):
-            result.data[colName].add(cell.strip())
+        let cells = line.findAll(re(regex))
+        for (cell, colName) in zip(cells, headers):
+            result.data[colName].add(cell.strip(chars={',','"'}).strip())
     #インデックスの設定
     if indexCol != "":
         if result.getColumns().contains(indexCol):

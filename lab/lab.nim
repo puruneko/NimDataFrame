@@ -8,6 +8,7 @@ import times
 import sets
 import re
 import math
+import encodings
 
 
 var a = "1H"
@@ -33,3 +34,11 @@ echo "aaa".replace("c", "b")
 echo toHashSet([1])
 
 echo "aaa" != "bbb"
+
+let sep = ","
+let regex = fmt"("".+?""({sep}|\n|$)|(?<!"")[^{sep}""]*?({sep}|\n|$))"
+let text = r",a,b,c,""あ,あ"""
+let ec = open("utf-8", "utf-8")
+let textConverted = ec.convert(text)
+ec.close()
+echo textConverted.split("\n")[0].findAll(re(regex))
