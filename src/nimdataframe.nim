@@ -89,11 +89,11 @@ proc toDataFrame*(
     defer: ec.close()
     let textConverted = ec.convert(text)
     #テキストデータの変換
-    let getRowItr = genCsvRowIterator(textConverted, sep, headerRows)
+    let rowItr = genCsvRowIterator(textConverted, sep, headerRows)
     var lineCount = 0
-    for row in getRowItr:
+    for row in rowItr:
         if row.len != headers.len:
-            raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len}")
+            raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len} (line {lineCount+1})")
         for (item, colName) in zip(row, headers):
             result.data[colName].add(item)
         lineCount += 1
@@ -131,17 +131,17 @@ proc toDataFrame*(
     defer: ec.close()
     let textConverted = ec.convert(text)
     #ヘッダーの取得
-    let getRowItr = genCsvRowIterator(textConverted, sep)
+    let rowItr = genCsvRowIterator(textConverted, sep)
     var headers: seq[string]
     for i in 0..<headerLineNumber:
-        headers = getRowItr()
+        headers = rowItr()
     for colName in headers:
         result[colName] = initSeries()
     #テキストデータの変換
     var lineCount = 0
-    for row in getRowItr:
+    for row in rowItr:
         if row.len != headers.len:
-            raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len}")
+            raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len} (line {lineCount+1})")
         for (item, colName) in zip(row, headers):
             result.data[colName].add(item)
         lineCount += 1
