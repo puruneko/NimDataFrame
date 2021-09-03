@@ -50,12 +50,12 @@ proc toBe*() =
     if not openOk_huge:
         quit(fmt"{filename_huge} open failed.")
     let csv_huge = fp.readAll()
-    var df_huge = toDataFrame(
+    df = toDataFrame(
         text=csv_huge,
         headerLineNumber=1,
     )
     echo3 ""
-    echo3 df_huge.toCsv()
+    echo3 df.toCsv()
     #
     echo "dropEmpty################################"
     df.dropEmpty().show(true)
@@ -321,12 +321,13 @@ proc toBe*() =
     echo "rolling agg(1)################################"
     echo3 df.setIndex("time").rolling(5).count()
     df.setIndex("time").rolling(5).sum().show(true)
+    df.setIndex("time").rolling(5).apply(applyFnG).show(true)
     #
     echo "rolling agg(2)################################"
     df.setIndex("time").rolling("1H").count().show(true)
     df.setIndex("time").rolling("1H").sum().show(true)
     #
-    echo "resaple 30M apply################################"
+    echo "rolling 30M apply################################"
     df.setIndex("time").rolling("30M").apply(applyFnG).show(true)
     #
     echo "transpose################################"

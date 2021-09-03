@@ -41,7 +41,30 @@ iterator columns*(df: DataFrame): string =
     for key in df.data.keys:
         yield key
 
+proc getColumns*(df: DataFrame): seq[string] =
+    for column in df.columns:
+        result.add(column)
+
+proc flattenDataFrame*(df: DataFrame): (seq[Series], Table[ColName, int], seq[ColName]) =
+    ## DataFrameをsequence化して、アクセス手段と一緒に返す
+    ## (Table型のハッシュアクセスがあまりにも遅いので苦肉の策で導入した関数)
+    ## ※Table[ColName, int]をproc(colName: ColName): intに変える手もある・・・。
+    runnableExamples:
+        var (seriesSeq, colTable, columns) = flattenDataFrame(df)
+        for i in 0..<df.len:
+            for colName in columns:
+                someFunc(seriesSeq[colTable[colName]][i])
+    ## 
+    let columns = df.getColumns()
+    var seriesSeq: seq[Series] = @[]
+    var colTable = initTable[ColName, int]()
+    for i, colName in columns.pairs():
+        seriesSeq.add(df.data[colName])
+        colTable[colName] = i
+    return (seriesSeq, colTable, columns)
+
 iterator rows*(df: DataFrame): Row =
+    let (seriesSeq, colTable, columns) = df.flattenDataFrame()
     let maxRowNumber = min(
         collect(newSeq) do:
             for colName in df.columns:
@@ -50,12 +73,8 @@ iterator rows*(df: DataFrame): Row =
     for i in 0..<maxRowNumber:
         var row = initRow()
         for colName in df.columns:
-            row[colName] = df.data[colName][i]
+            row[colName] = seriesSeq[colTable[colName]][i]
         yield row
-
-proc getColumns*(df: DataFrame): seq[string] =
-    for column in df.columns:
-        result.add(column)
 
 proc getSeries*(df: DataFrame): seq[Series] =
     for value in df.data.values:
@@ -331,9 +350,10 @@ proc addColumns*[T](df: var DataFrame, columns: openArray[(ColName, seq[T])], fi
 
 proc deepCopy*(df: DataFrame): DataFrame =
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<df.len:
-        for colName in df.columns:
-            result.data[colName].add(df[colName][i])
+        for colName in columns:
+            result.data[colName].add(seriesSeq[colTable[colName]][i])
 
 proc `[]`*(df: DataFrame, colNames: openArray[ColName]): DataFrame =
     ## 指定した列だけ返す.
@@ -348,17 +368,19 @@ proc `[]`*(df: DataFrame, colNames: openArray[ColName]): DataFrame =
 proc keep*(df: DataFrame, fs: FilterSeries): DataFrame =
     ## trueをkeepする（fsがtrueの行だけ返す）.
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for colName in df.columns:
         for i, b in fs.pairs():
             if b:
-                result.data[colName].add(df[colName][i])
+                result.data[colName].add(seriesSeq[colTable[colName]][i])
 proc drop*(df: DataFrame, fs: FilterSeries): DataFrame =
     ## trueをdropする（fsがtrueの行を落として返す）（fsがfalseの行だけ返す）.
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for colName in df.columns:
         for i, b in fs.pairs():
             if not b:
-                result.data[colName].add(df[colName][i])
+                result.data[colName].add(seriesSeq[colTable[colName]][i])
 
 proc `[]`*(df: DataFrame, fs: FilterSeries): DataFrame =
     ## fsがtrueの行だけ返す.
@@ -367,22 +389,24 @@ proc `[]`*(df: DataFrame, fs: FilterSeries): DataFrame =
 proc `[]`*(df: DataFrame, slice: HSlice[int, int]): DataFrame =
     ## sliceの範囲の行だけ返す.
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     let len = df.len
     for i in slice:
         if i < 0 or i >= len:
             continue
         for colName in df.columns:
-            result.data[colName].add(df[colName][i])
+            result.data[colName].add(seriesSeq[colTable[colName]][i])
 
 proc `[]`*(df: DataFrame, indices: openArray[int]): DataFrame =
     ## indicesの行だけ返す.
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     let len = df.len
     for i in indices:
         if i < 0 or i >= len:
             continue
         for colName in df.columns:
-            result.data[colName].add(df[colName][i])
+            result.data[colName].add(seriesSeq[colTable[colName]][i])
 
 proc iloc*(df: DataFrame, i: int): Row =
     ## index番目の行をRow形式で返す.
@@ -393,22 +417,24 @@ proc iloc*(df: DataFrame, i: int): Row =
 proc loc*(df: DataFrame, c: Cell): DataFrame =
     ## indexの行の値がcの値と一致する行を返す.
     result = initDataFrame(df)
-    let columns = df.getColumns()
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<df.len:
         if df[df.indexCol][i] == c:
             for colName in columns:
-                result.data[colName].add(df[colName][i])
+                result.data[colName].add(seriesSeq[colTable[colName]][i])
 
 proc head*(df: DataFrame, num: int): DataFrame =
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<min(num,df.len):
-        for colName in result.columns:
-            result.data[colName].add(df[colName][i])
+        for colName in columns:
+            result.data[colName].add(seriesSeq[colTable[colName]][i])
 proc tail*(df: DataFrame, num: int): DataFrame =
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in df.len-min(num,df.len)..<df.len:
-        for colName in result.columns:
-            result.data[colName].add(df[colName][i])
+        for colName in columns:
+            result.data[colName].add(seriesSeq[colTable[colName]][i])
 
 proc index*(df: DataFrame): Series =
     df[df.indexCol]
@@ -425,20 +451,3 @@ proc size*(df: DataFrame, excludeIndex=false): int =
         else:
             df.getColumns().len
     )
-
-proc flattenDataFrame*(df: DataFrame): (seq[Series], Table[ColName, int], seq[ColName]) =
-    ## DataFrameをsequence化して、アクセス手段と一緒に返す
-    ## (Table型のハッシュアクセスがあまりにも遅いので苦肉の策で導入した関数)
-    runnableExamples:
-        var (seriesSeq, colTable, columns) = flattenDataFrame(df)
-        for i in 0..<df.len:
-            for colName in columns:
-                someFunc(seriesSeq[colTable[colName]])
-    ## 
-    let columns = df.getColumns()
-    var seriesSeq: seq[Series] = @[]
-    var colTable = initTable[ColName, int]()
-    for i, colName in columns.pairs():
-        seriesSeq.add(df[colName])
-        colTable[colName] = i
-    return (seriesSeq, colTable, columns)

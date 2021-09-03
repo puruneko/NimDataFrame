@@ -30,16 +30,17 @@ proc fillEmpty*[T](df: DataFrame, fill: T): DataFrame =
 
 proc dropEmpty*(df: DataFrame): DataFrame =
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<df.len:
         var skip = false
-        for colName in df.columns:
-            if df[colName][i] == dfEmpty:
+        for colName in columns:
+            if seriesSeq[colTable[colName]][i] == dfEmpty:
                 skip = true
                 break
         if skip:
             continue
-        for colName in df.columns:
-            result.data[colName].add(df[colName][i])
+        for colName in columns:
+            result.data[colName].add(seriesSeq[colTable[colName]][i])
 
 
 ###############################################################
@@ -165,9 +166,11 @@ proc sort*[T](df: DataFrame, colName: ColName = "", fromCell: Cell -> T, ascendi
         elif x[1] == y[1]: 0
         else: 1*coef
     sortSource.sort(cmp)
+    #
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for sorted in sortSource:
-        for colName in df.columns:
-            result.data[colName].add(df.data[colName][sorted[0]])
+        for colName in columns:
+            result.data[colName].add(seriesSeq[colTable[colName]][sorted[0]])
 
 proc sort*[T](df: DataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): DataFrame =
     result = df.deepCopy()
@@ -210,8 +213,8 @@ proc duplicated*(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries
     ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス）.
     ##
     result = initFilterSeries()
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     var checker = initTable[seq[string], bool]()
-    var columns = colNames.toSeq()
     if columns.len == 0:
         columns = @[df.indexCol]
     #1行ずつ見ていって、同じものがあったらtrue、まだないならfalseを格納
@@ -219,7 +222,7 @@ proc duplicated*(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries
         let row =
             collect(newSeq):
                 for colName in columns:
-                    df[colName][i]
+                    seriesSeq[colTable[colName]][i]
         if row in checker:
             result.add(true)
         else:

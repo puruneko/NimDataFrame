@@ -248,7 +248,7 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataF
 proc toCsv*(df: DataFrame): string =
     var lines: seq[string] = @[]
     var line: seq[string] = @[]
-    var (seriesSeq, colTable, columns) = flattenDataFrame(df)
+    let (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for colName in columns:
         if colName.contains({',','\n','\r'}):
             line.add("\"" & colName & "\"")
@@ -290,7 +290,7 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
         result &= "+-------+"
     #空ではない場合
     else:
-        var columns = df.getColumns()
+        var (seriesSeq, colTable, columns) = df.flattenDataFrame()
         for i, colName in columns.pairs():
             if colName == df.indexCol:
                 columns.del(i)
@@ -302,7 +302,7 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
             let dataWidth = max(
                 collect(newSeq) do:
                     for i in 0..<df[colName].len:
-                        df[colName][i].len
+                        seriesSeq[colTable[colName]][i].len
             )
             width[colName] = max(colName.len, dataWidth) + indexColSign.ord
             fullWidth += width[colName] + 2
@@ -324,7 +324,7 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
         for i in 0..<df.len:
             result &= "|"
             for colName in columns:
-                result &= " ".repeat(width[colName]-df[colName][i].len+1) & df[colName][i] & " |"
+                result &= " ".repeat(width[colName]-seriesSeq[colTable[colName]][i].len+1) & seriesSeq[colTable[colName]][i] & " |"
             result &= "\n"
         result &= "+" & "-".repeat(fullWidth-1) & "+"
 
