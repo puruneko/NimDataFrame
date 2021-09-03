@@ -43,19 +43,21 @@ proc toBe*() =
     df.show(true)
     #
     echo "df huge################################"
-    const filename_huge = "./test/sample_huge.csv"
+    const filename_huge = "./test/sample_data.csv"
     var fp_huge: File
     let openOk_huge = fp.open(filename_huge, fmRead)
     defer: fp_huge.close()
     if not openOk_huge:
         quit(fmt"{filename_huge} open failed.")
     let csv_huge = fp.readAll()
-    df = toDataFrame(
+    var df_huge = toDataFrame(
         text=csv_huge,
         headerLineNumber=1,
     )
     echo3 ""
-    echo3 df.toCsv()
+    echo3 df_huge.toCsv()
+
+    df = df_huge
     #
     echo "dropEmpty################################"
     df.dropEmpty().show(true)
