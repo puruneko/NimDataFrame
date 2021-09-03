@@ -426,3 +426,19 @@ proc size*(df: DataFrame, excludeIndex=false): int =
             df.getColumns().len
     )
 
+proc flattenDataFrame*(df: DataFrame): (seq[Series], Table[ColName, int], seq[ColName]) =
+    ## DataFrameをsequence化して、アクセス手段と一緒に返す
+    ## (Table型のハッシュアクセスがあまりにも遅いので苦肉の策で導入した関数)
+    runnableExamples:
+        var (seriesSeq, colTable, columns) = flattenDataFrame(df)
+        for i in 0..<df.len:
+            for colName in columns:
+                someFunc(seriesSeq[colTable[colName]])
+    ## 
+    let columns = df.getColumns()
+    var seriesSeq: seq[Series] = @[]
+    var colTable = initTable[ColName, int]()
+    for i, colName in columns.pairs():
+        seriesSeq.add(df[colName])
+        colTable[colName] = i
+    return (seriesSeq, colTable, columns)

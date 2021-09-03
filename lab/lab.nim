@@ -26,3 +26,13 @@ proc genIterator(a: string, b: int): iterator =
 let itr = genIterator("abc", 10)
 for x in itr:
     echo x
+
+template `[]`(tpl, key): untyped =
+    tpl.key
+
+var x: tuple[name: string, age: int]
+x.name = "john"
+x.age = 16
+
+let n = "name"
+echo x["name"]

@@ -15,6 +15,10 @@ import re
 import ../src/nimdataframe
 
 proc toBe*() =
+    proc echo3[T](a: varargs[T]) =
+        discard
+    proc show(a: DataFrame, b: bool) =
+        discard
     const filename = "./test/sample.csv"
     var fp: File
     let openOk = fp.open(filename, fmRead)
@@ -30,7 +34,6 @@ proc toBe*() =
         headerRows=1,
     )
     df.show(true)
-    echo df.toCsv()
     #
     echo "df (2)################################"
     df = toDataFrame(
@@ -38,6 +41,21 @@ proc toBe*() =
         headerLineNumber=1,
     )
     df.show(true)
+    #
+    echo "df huge################################"
+    const filename_huge = "./test/sample_huge.csv"
+    var fp_huge: File
+    let openOk_huge = fp.open(filename_huge, fmRead)
+    defer: fp_huge.close()
+    if not openOk_huge:
+        quit(fmt"{filename_huge} open failed.")
+    let csv_huge = fp.readAll()
+    var df_huge = toDataFrame(
+        text=csv_huge,
+        headerLineNumber=1,
+    )
+    echo3 ""
+    echo3 df_huge.toCsv()
     #
     echo "dropEmpty################################"
     df.dropEmpty().show(true)
@@ -57,7 +75,7 @@ proc toBe*() =
         colNames=["col1","col2","col3","col10"],
         indexCol="col1"
     )
-    echo df1
+    echo3 df1
     #
     echo "drop################################"
     df.dropColumns(["time","name"]).show(true)
@@ -66,27 +84,27 @@ proc toBe*() =
     df.renameColumns({"time":"TIME","name":"NAME","sales":"SALES"}).show(true)
     #
     echo "stats################################"
-    echo df.mean()
-    echo df.max()
+    echo3 df.mean()
+    echo3 df.max()
     #
     echo "map################################"
-    echo df["sales"].intMap(c => c*2)
-    echo df["time"].datetimeMap(c => c+initDuration(hours=1))
+    echo3 df["sales"].intMap(c => c*2)
+    echo3 df["time"].datetimeMap(c => c+initDuration(hours=1))
     let triple = proc(c: int): int =
         c * 3
-    echo df["sales"].map(triple, parseInt)
+    echo3 df["sales"].map(triple, parseInt)
     #
     echo "filter################################"
     df.filter(row => row["sales"] >= 2000).show(true)
     df.filter(row => row["sales"] > 1000 and 3000 > row["sales"]).show(true)
     #
     echo "loc,iloc################################"
-    echo df1.loc("1")
-    echo df.iloc(0)
+    echo3  df1.loc("1")
+    echo3 df.iloc(0)
     #
     echo "getRows################################"
-    echo df.getRows()
-    echo df.getColumns()
+    echo3 df.getRows()
+    echo3 df.getColumns()
     #
     echo "sort################################"
     df.sort("name", ascending=false).show(true)
@@ -98,8 +116,8 @@ proc toBe*() =
     df.intSort("sales").resetIndex().show(true)
     #
     echo "index,shape################################"
-    echo df.index
-    echo df.shape
+    echo3 df.index
+    echo3 df.shape
     #
     echo "[]################################"
     df[["time","sales"]].show(true)
@@ -113,13 +131,13 @@ proc toBe*() =
     df.tail(999999999).show(true)
     #
     echo "duplicated################################"
-    echo df.duplicated(["sales"])
+    echo3 df.duplicated(["sales"])
     df.dropDuplicates(["sales"]).show(true)
     df.dropDuplicates().show(true)
     df.dropDuplicates(["time","sales"]).show(true)
     #
     echo "groupby################################"
-    echo df.groupby(["time","name"])
+    echo3 df.groupby(["time","name"])
     #
     echo "groupby mean,max################################"
     df.groupby(["time","name"]).mean().show(true)
@@ -166,7 +184,7 @@ proc toBe*() =
             "b": @["B_1", "B_2", "B_2", "B_3"],
         }
     )
-    echo "df_ab"
+    echo3 "df_ab"
     df_ab.show(true)
     var df_ac = toDataFrame(
         columns = {
@@ -174,7 +192,7 @@ proc toBe*() =
             "c": @["C_10", "C_20", "C_30", "C_2", "C_4"]
         }
     )
-    echo "df_ac"
+    echo3 "df_ac"
     df_ac.show(true)
     var df_ac2 = toDataFrame(
         columns = {
@@ -183,7 +201,7 @@ proc toBe*() =
             "c": @["C_10", "C_20", "C_30", "C_2", "C_4"]
         }
     )
-    echo "df_ac2"
+    echo3 "df_ac2"
     df_ac2.show(true)
 
     merge(df_ab, df_ac, left_on=["a"], right_on=["a"], how="inner").sort(["a","b"]).show(true)
@@ -292,16 +310,16 @@ proc toBe*() =
     df_h["a"] = @[1]
     df_h["b"] = @[1,2,3,4,5]
     df_h.indexCol = "a"
-    echo healthCheck(df_h)
+    echo3 healthCheck(df_h)
     df_h.indexCol = "b"
-    echo healthCheck(df_h)
+    echo3 healthCheck(df_h)
     df_h["b"] = @[2]
-    echo healthCheck(df_h)
+    echo3 healthCheck(df_h)
     df_h.indexCol = "c"
-    echo healthCheck(df_h)
+    echo3 healthCheck(df_h)
     #
     echo "rolling agg(1)################################"
-    echo df.setIndex("time").rolling(5).count()
+    echo3 df.setIndex("time").rolling(5).count()
     df.setIndex("time").rolling(5).sum().show(true)
     #
     echo "rolling agg(2)################################"
@@ -372,8 +390,8 @@ proc toBe*() =
     df2.show(true)
     #
     echo "size################################"
-    echo df2.size()
-    echo df2.size(true)
+    echo3 df2.size()
+    echo3 df2.size(true)
     #[
     ]#
 

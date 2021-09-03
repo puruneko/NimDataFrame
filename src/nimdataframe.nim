@@ -246,19 +246,24 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataF
 
 ###############################################################
 proc toCsv*(df: DataFrame): string =
-    result = ""
-    var line = ""
-    for colName in df.columns:
-        line &= (colName & ",")
-    result &= line[0..<line.len-1] & "\n"
+    var lines: seq[string] = @[]
+    var line: seq[string] = @[]
+    var (seriesSeq, colTable, columns) = flattenDataFrame(df)
+    for colName in columns:
+        if colName.contains({',','\n','\r'}):
+            line.add("\"" & colName & "\"")
+        else:
+            line.add(colName)
+    lines.add(line.join(","))
     for i in 0..<df.len:
-        line = ""
-        for colName in df.columns:
-            if df[colName][i].contains({',','\n','\r'}):
-                line &= "\"" & df[colName][i] & "\"" & ","
+        line = @[]
+        for colName in columns:
+            if seriesSeq[colTable[colName]][i].contains({',','\n','\r'}):
+                line.add("\"" & seriesSeq[colTable[colName]][i] & "\"")
             else:
-                line &= df[colName][i] & ","
-        result &= line[0..<line.len-1] & "\n"
+                line.add(seriesSeq[colTable[colName]][i])
+        lines.add(line.join(","))
+    result = lines.join("\n")
 
 proc toCsv*(df: DataFrame, filename: string, encoding="utf-8") =
     var fp: File
