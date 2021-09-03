@@ -30,7 +30,7 @@ proc toBe*() =
         headerRows=1,
     )
     df.show(true)
-    #df.toCsv("test.csv")
+    echo df.toCsv()
     #
     echo "df (2)################################"
     df = toDataFrame(

@@ -36,23 +36,20 @@ proc genCsvRowIterator(csv: string, sep=',', skipRows=0): iterator =
     result =
         iterator (): seq[string] =
             var dQuoteFlag = false
-            var colNumber = 0
-            var lineCount = 1
+            var lineCount = 0
             var cell = ""
             var row: seq[string] = @[]
             for i in 0..<csv.len:
                 if i != 0 and not dQuoteFlag and csv[i-1] == '\r' and csv[i] == '\n':
                     continue
                 elif not dQuoteFlag and (csv[i] == sep or csv[i] == '\n' or csv[i] == '\r'):
-                    if lineCount > skipRows:
+                    if lineCount >= skipRows:
                         row.add(cell)
                     cell = ""
-                    colNumber += 1
                     if csv[i] == '\n' or csv[i] == '\r':
-                        if lineCount > skipRows:
+                        if lineCount >= skipRows:
                             yield row
                         row = @[]
-                        colNumber = 0
                         lineCount += 1
                 elif not dQuoteFlag and csv[i] == '"':
                     dQuoteFlag = true
@@ -257,7 +254,10 @@ proc toCsv*(df: DataFrame): string =
     for i in 0..<df.len:
         line = ""
         for colName in df.columns:
-            line &= df[colName][i] & ","
+            if df[colName][i].contains({',','\n','\r'}):
+                line &= "\"" & df[colName][i] & "\"" & ","
+            else:
+                line &= df[colName][i] & ","
         result &= line[0..<line.len-1] & "\n"
 
 proc toCsv*(df: DataFrame, filename: string, encoding="utf-8") =
