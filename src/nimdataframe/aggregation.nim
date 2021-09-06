@@ -414,7 +414,7 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                 for colName in columns:
                     result.data[colName] = initSeries()
                     sTmp.add(newSeq[string](int(dfre.data.len/w+1)))
-            var index: seq[Cell] = @[]
+            var index: seq[Cell] = newSeq[Cell](int(dfre.data.len/w+1))
             when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
                 var dfs: seq[DataFrame] = @[]
             var i = 0
@@ -425,14 +425,16 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                     
                 body
 
-                index.add(dfre.data[dfre.data.indexCol][j])
+                index[i] = seriesSeq[colTable[dfre.data.indexCol]][j]
                 i.inc()
             when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
                 result = concat(dfs = dfs)
             
+            #[
             when typeof(fn) is (Series -> T):
                 for colIndex, colName in columns.pairs():
                     result.data[colName] = sTmp[colIndex]
+            ]#
 
             result.indexCol = dfre.data.indexCol
             result.data[dfre.data.indexCol] = index
@@ -525,8 +527,8 @@ proc agg*[T](dfre: DataFrameResample, fn: Series -> T): DataFrame =
 
     resampleAggTemplate:
         for colIndex, colName in columns.pairs():
-            #result.data[colName].add(fn(seriesSeq[colIndex][slice]).parseString())
-            sTmp[colIndex][i] = (fn(seriesSeq[colIndex][slice]).parseString())
+            result.data[colName].add(fn(seriesSeq[colIndex][slice]).parseString())
+            #sTmp[colIndex][i] = (fn(seriesSeq[colIndex][slice]).parseString())
 
 proc count*(dfre: DataFrameResample): DataFrame =
     dfre.agg(count)
