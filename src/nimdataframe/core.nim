@@ -55,6 +55,7 @@ proc flattenDataFrame*(df: DataFrame): (seq[Series], Table[ColName, int], seq[Co
             for colName in columns:
                 someFunc(seriesSeq[colTable[colName]][i])
     ## 
+
     let columns = df.getColumns()
     var seriesSeq: seq[Series] = @[]
     var colTable = initTable[ColName, int]()
@@ -72,7 +73,7 @@ iterator rows*(df: DataFrame): Row =
     )
     for i in 0..<maxRowNumber:
         var row = initRow()
-        for colName in df.columns:
+        for colName in columns:
             row[colName] = seriesSeq[colTable[colName]][i]
         yield row
 

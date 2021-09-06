@@ -405,24 +405,35 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
             let w = m0.parseInt()
             #各行をwindow飛ばしで処理する
             when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
+                var colIndices: seq[int] = @[]
                 for (colName, _) in fn:
                     result.data[colName] = initSeries()
+                    colIndices.add(colTable[colName])
             else:
+                var sTmp: seq[Series] = @[]
                 for colName in columns:
                     result.data[colName] = initSeries()
+                    sTmp.add(newSeq[string](int(dfre.data.len/w+1)))
             var index: seq[Cell] = @[]
             when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
                 var dfs: seq[DataFrame] = @[]
-            for i in countup(0, dfre.data.len-1, w):
-                var slice = i..<i+w
+            var i = 0
+            for j in countup(0, dfre.data.len-1, w):
+                var slice = j..<j+w
                 if slice.b >= dfre.data.len:
                     slice.b = dfre.data.len-1
                     
                 body
 
-                index.add(dfre.data[dfre.data.indexCol][i])
+                index.add(dfre.data[dfre.data.indexCol][j])
+                i.inc()
             when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
                 result = concat(dfs = dfs)
+            
+            when typeof(fn) is (Series -> T):
+                for colIndex, colName in columns.pairs():
+                    result.data[colName] = sTmp[colIndex]
+
             result.indexCol = dfre.data.indexCol
             result.data[dfre.data.indexCol] = index
         #datetime範囲指定の場合
@@ -447,12 +458,17 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
             #DateTime型に変換したindexを上から順にみていく
             result.indexCol = dfre.data.indexCol
             when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
+                var colIndices: seq[int] = @[]
                 for (colName, _) in fn:
                     result.data[colName] = initSeries()
+                    colIndices.add(colTable[colName])
             else:
+                var sTmp: seq[Series] = @[]
                 for colName in columns:
                     result.data[colName] = initSeries()
-            for i, dt in datetimes.pairs():
+                    sTmp.add(initSeries())
+            var i = 0
+            for dt in datetimes:
                 #範囲外になった場合、集計
                 if startDatetime + getInterval(interval) <= dt:
                     var slice = startIndex..<i
@@ -464,6 +480,7 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                     index.add(startDatetime + getInterval(interval-w))
                     startIndex = i
                     interval += w
+                i.inc()
             #window刻みの余り分の処理
             if startIndex < dfre.data.len-1:
                 var slice = startIndex..<dfre.data.len
@@ -473,6 +490,11 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                 index.add(startDatetime + getInterval(interval-w))
             when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
                 result = concat(dfs = dfs)
+            
+            when typeof(fn) is (Series -> T):
+                for colIndex, colName in columns.pairs():
+                    result.data[colName] = sTmp[colIndex]
+
             result.indexCol = dfre.data.indexCol
             result.data[dfre.data.indexCol] = index.toString()
         #指定フォーマットでない場合
@@ -492,8 +514,8 @@ proc agg*[T](dfre: DataFrameResample, fn: openArray[(ColName, Series -> T)]): Da
     ##
 
     resampleAggTemplate:
-        for (colName, f) in fn:
-            result.data[colName].add(f(seriesSeq[colTable[colName]][slice]).parseString())
+        for k, (colName, f) in fn.pairs():
+            result.data[colName].add(f(seriesSeq[colIndices[k]][slice]).parseString())
 
 proc agg*[T](dfre: DataFrameResample, fn: Series -> T): DataFrame =
     ## リサンプルされたDataFrameの各グループの全列に対して関数fnを適用する
@@ -502,8 +524,9 @@ proc agg*[T](dfre: DataFrameResample, fn: Series -> T): DataFrame =
     ##
 
     resampleAggTemplate:
-        for colName in result.columns:
-            result.data[colName].add(fn(seriesSeq[colTable[colName]][slice]).parseString())
+        for colIndex, colName in columns.pairs():
+            #result.data[colName].add(fn(seriesSeq[colIndex][slice]).parseString())
+            sTmp[colIndex][i] = (fn(seriesSeq[colIndex][slice]).parseString())
 
 proc count*(dfre: DataFrameResample): DataFrame =
     dfre.agg(count)
@@ -541,13 +564,13 @@ proc apply*[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): Data
         var df1 = initDataFrame(dfre.data)
         if slice.b >= dfre.data.len:
             slice.b = dfre.data.len-1
-        for colName in result.columns:
-            df1[colName] = seriesSeq[colTable[colName]][slice]
+        for colIndex, colName in columns.pairs():
+            df1.data[colName] = seriesSeq[colIndex][slice]
         #applyFn適用
         var applyTable = fn(df1)
         var df2 = initDataFrame()
         for (colName, c) in applyTable.pairs():
-            df2[colName] = @[c.parseString()]
+            df2.data[colName] = @[c.parseString()]
         dfs.add(df2)
 
 
@@ -630,8 +653,9 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
             for i, dt in datetimes.pairs():
                 #範囲内を集計
                 var slice = 0..i
+                let underLimit = dt - timeInterval
                 for j, dt2 in datetimes.pairs():
-                    if dt2 <= dt - timeInterval:
+                    if dt2 <= underLimit:
                         slice.a = j + 1
                     if j >= i:
                         break
