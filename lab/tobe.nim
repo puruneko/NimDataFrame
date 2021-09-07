@@ -153,6 +153,16 @@ proc toBe*() =
     timeAttack("dropDuplicates [time, sales]"):
         df.dropDuplicates(["time","sales"]).show(true)
     #
+    proc applyFnG(df: DataFrame): Table[ColName,Cell] =
+        var c: Cell
+        if df["name"][0] == "abc":
+            c = df["sales"].intMap(c => c/10).mean()
+        else:
+            c = df["sales"].intMap(c => c*10).mean()
+        result = {
+            "sales_changed": c
+        }.toTable()
+    #[
     timeAttack("groupby"):
         echo3 df.groupby(["time","name"])
     #
@@ -166,34 +176,101 @@ proc toBe*() =
     timeAttack("groupby agg"):
         df.groupby(["time","name"]).agg({"sales": aggFnG}).show(true)
     #
-    proc applyFnG(df: DataFrame): Table[ColName,Cell] =
-        var c: Cell
-        if df["name"][0] == "abc":
-            c = df["sales"].intMap(c => c/10).mean()
-        else:
-            c = df["sales"].intMap(c => c*10).mean()
-        result = {
-            "sales_changed": c
-        }.toTable()
     timeAttack("groupby apply"):
         df.groupby(["time","name"]).apply(applyFnG).show(true)
     #
-    timeAttack("resaple 5 mean"):
+    ]#
+    timeAttack("resample 5 mean"):
         df.resample(5).sum().show(true)
     #
-    timeAttack("resaple 1H agg1"):
+    timeAttack("resample 1H mean"):
         df.setIndex("time").resample("1H").mean().show(true)
     #
-    timeAttack("resaple 30M agg1"):
+    timeAttack("resample 30M mean"):
         df.setIndex("time").resample("30M").mean().show(true)
     #
     proc aggFnRe(s: Series): float{.closure.} =
         sum(s)*100
-    timeAttack("resaple 30M agg2"):
+    timeAttack("resample 30M agg2"):
         df.setIndex("time").resample("30M").agg({"sales":aggFnRe}).show(true)
     #
-    timeAttack("resaple 30M apply"):
+    timeAttack("resample 30M apply"):
         df.setIndex("time").resample("30M").apply(applyFnG).show(true)
+    #
+    timeAttack("rolling 5 count"):
+        echo3 df.setIndex("time").rolling(5).count()
+    timeAttack("rolling 5 sum"):
+        df.setIndex("time").rolling(5).sum().show(true)
+    timeAttack("rolling 5 apply"):
+        df.setIndex("time").rolling(5).apply(applyFnG).show(true)
+    #
+    timeAttack("rolling 1H count"):
+        df.setIndex("time").rolling("1H").count().show(true)
+    timeAttack("rolling 1H sum"):
+        df.setIndex("time").rolling("1H").sum().show(true)
+    #
+    timeAttack("rolling 30M apply"):
+        df.setIndex("time").rolling("30M").apply(applyFnG).show(true)
+    #
+    timeAttack("replace(1)"):
+        df.replace("abc", "ABC").show(true)
+    #
+    timeAttack("replace(2)"):
+        df.replace(re"(\d\d)", "@$1@").show(true)
+    #
+    var df2 = toDataFrame(
+        columns = {
+            "a": @[1,2],
+            "b": @[3,4],
+            "c": @[10,20],
+            "d": @[100,200]
+        },
+        indexCol = "a",
+    )
+    timeAttack("addRow"):
+        df2.addRow({"a": 3, "b": 5, "c": 30, "d": 300})
+        df2.show(true)
+        df2.addRow({"a": 4}, fillEmpty=true)
+        df2.show(true)
+        df2.addRow({"b": 7, "c": 50, "d": 500}, autoIndex=true)
+        df2.show(true)
+        df2.addRow({"c": 60}, autoIndex=true, fillEmpty=true)
+        df2.show(true)
+    #
+    timeAttack("addRows"):
+        df2.addRows(
+            items = {
+                "b": @[9,10],
+                "c": @[70]
+            },
+            autoIndex=true,
+            fillEmptyRow=true,
+            fillEmptyCol=true,
+        )
+        df2.show(true)
+    #
+    timeAttack("addColumns(1)"):
+        df2.addColumns(
+            columns = {
+                "b": @[0,1,2,3,4,5,6,7],
+                "e": @[0,1,2,3,4,5,6,7],
+            }
+        )
+        df2.show(true)
+    #
+    timeAttack("addColumns(2)"):
+        df2.addColumns(
+            columns = {
+                "b": @[0,0,0,0,0,0,0],
+                "f": @[0,0,0,0,0,0,0],
+            },
+            fillEmpty = true
+        )
+        df2.show(true)
+    #
+    timeAttack("size"):
+        echo3 df2.size()
+        echo3 df2.size(true)
     #
     var df_ab = toDataFrame(
         columns = {
@@ -324,84 +401,9 @@ proc toBe*() =
         df_h.indexCol = "c"
         echo3 healthCheck(df_h)
     #
-    timeAttack("rolling 5 count"):
-        echo3 df.setIndex("time").rolling(5).count()
-    timeAttack("rolling 5 sum"):
-        df.setIndex("time").rolling(5).sum().show(true)
-    timeAttack("rolling 5 apply"):
-        df.setIndex("time").rolling(5).apply(applyFnG).show(true)
-    #
-    timeAttack("rolling 1H count"):
-        df.setIndex("time").rolling("1H").count().show(true)
-    timeAttack("rolling 1H sum"):
-        df.setIndex("time").rolling("1H").sum().show(true)
-    #
-    timeAttack("rolling 30M apply"):
-        df.setIndex("time").rolling("30M").apply(applyFnG).show(true)
-    #
     timeAttack("transpose"):
         df_j1.show(true)
         df_j1.transpose().show(true)
-    #
-    timeAttack("replace(1)"):
-        df.replace("abc", "ABC").show(true)
-    #
-    timeAttack("replace(2)"):
-        df.replace(re"(\d\d)", "@$1@").show(true)
-    #
-    var df2 = toDataFrame(
-        columns = {
-            "a": @[1,2],
-            "b": @[3,4],
-            "c": @[10,20],
-            "d": @[100,200]
-        },
-        indexCol = "a",
-    )
-    timeAttack("addRow"):
-        df2.addRow({"a": 3, "b": 5, "c": 30, "d": 300})
-        df2.show(true)
-        df2.addRow({"a": 4}, fillEmpty=true)
-        df2.show(true)
-        df2.addRow({"b": 7, "c": 50, "d": 500}, autoIndex=true)
-        df2.show(true)
-        df2.addRow({"c": 60}, autoIndex=true, fillEmpty=true)
-        df2.show(true)
-    #
-    timeAttack("addRows"):
-        df2.addRows(
-            items = {
-                "b": @[9,10],
-                "c": @[70]
-            },
-            autoIndex=true,
-            fillEmptyRow=true,
-            fillEmptyCol=true,
-        )
-        df2.show(true)
-    #
-    timeAttack("addColumns(1)"):
-        df2.addColumns(
-            columns = {
-                "b": @[0,1,2,3,4,5,6,7],
-                "e": @[0,1,2,3,4,5,6,7],
-            }
-        )
-        df2.show(true)
-    #
-    timeAttack("addColumns(2)"):
-        df2.addColumns(
-            columns = {
-                "b": @[0,0,0,0,0,0,0],
-                "f": @[0,0,0,0,0,0,0],
-            },
-            fillEmpty = true
-        )
-        df2.show(true)
-    #
-    timeAttack("size"):
-        echo3 df2.size()
-        echo3 df2.size(true)
     #[
     ]#
 
