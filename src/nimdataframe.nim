@@ -257,11 +257,11 @@ proc toCsv*(df: DataFrame): string =
     lines.add(line.join(","))
     for i in 0..<df.len:
         line = @[]
-        for colName in columns:
-            if seriesSeq[colTable[colName]][i].contains({',','\n','\r'}):
-                line.add("\"" & seriesSeq[colTable[colName]][i] & "\"")
+        for colIndex, colName in columns.pairs():
+            if seriesSeq[colIndex][i].contains({',','\n','\r'}):
+                line.add("\"" & seriesSeq[colIndex][i] & "\"")
             else:
-                line.add(seriesSeq[colTable[colName]][i])
+                line.add(seriesSeq[colIndex][i])
         lines.add(line.join(","))
     result = lines.join("\n")
 
@@ -297,12 +297,12 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
                 columns = concat(@[df.indexCol], columns)
                 break
         var width: Table[string,int]
-        var fullWidth = df.getColumns().len
-        for colName in columns:
+        var fullWidth = columns.len
+        for colIndex, colName in columns.pairs():
             let dataWidth = max(
                 collect(newSeq) do:
                     for i in 0..<df[colName].len:
-                        seriesSeq[colTable[colName]][i].len
+                        seriesSeq[colIndex][i].len
             )
             width[colName] = max(colName.len, dataWidth) + indexColSign.ord
             fullWidth += width[colName] + 2
@@ -323,8 +323,8 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
         #
         for i in 0..<df.len:
             result &= "|"
-            for colName in columns:
-                result &= " ".repeat(width[colName]-seriesSeq[colTable[colName]][i].len+1) & seriesSeq[colTable[colName]][i] & " |"
+            for colIndex, colName in columns.pairs():
+                result &= " ".repeat(width[colName]-seriesSeq[colIndex][i].len+1) & seriesSeq[colIndex][i] & " |"
             result &= "\n"
         result &= "+" & "-".repeat(fullWidth-1) & "+"
 

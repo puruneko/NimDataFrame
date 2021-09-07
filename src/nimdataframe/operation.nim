@@ -33,14 +33,14 @@ proc dropEmpty*(df: DataFrame): DataFrame =
     var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<df.len:
         var skip = false
-        for colName in columns:
-            if seriesSeq[colTable[colName]][i] == dfEmpty:
+        for colIndex, colName in columns.pairs():
+            if seriesSeq[colIndex][i] == dfEmpty:
                 skip = true
                 break
         if skip:
             continue
-        for colName in columns:
-            result.data[colName].add(seriesSeq[colTable[colName]][i])
+        for colIndex, colName in columns.pairs():
+            result.data[colName].add(seriesSeq[colIndex][i])
 
 
 ###############################################################
@@ -80,7 +80,7 @@ proc resetIndex*[T](df: DataFrame, fn: int -> T): DataFrame =
                     for i in 0..<df.len:
                         fn(i).parseString()
         else:
-            result.data[colName] = df[colName]
+            result.data[colName] = df.data[colName]
 
 proc resetIndex*(df: DataFrame): DataFrame =
     let f = proc(i: int): Cell = $i
@@ -145,32 +145,36 @@ proc filter*(df: DataFrame, fltr: Row -> bool): DataFrame =
 
 
 ###############################################################
+proc cmpAsc[T](x: (int,T), y: (int,T)): int =
+    if x[1] < y[1]: -1
+    elif x[1] == y[1]: 0
+    else: 1
+proc cmpDec[T](x: (int,T), y: (int,T)): int =
+    if x[1] < y[1]: 1
+    elif x[1] == y[1]: 0
+    else: -1
 proc sort*[T](df: DataFrame, colName: ColName = "", fromCell: Cell -> T, ascending=true): DataFrame =
     ## DataFrameを指定列でソートする.
     ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する.
     ##
     result = initDataFrame(df)
+    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     let cn =
         if colName != "":
             colName
         else:
             df.indexCol
     var sortSource = collect(newSeq):
-        for rowNumber, row in df.getRows().pairs():
-            (rowNumber, fromCell(row[cn]))
-    let coef =
-        if ascending: 1
-        else: -1
-    let cmp = proc(x: (int,T), y: (int,T)): int =
-        if x[1] < y[1]: -1*coef
-        elif x[1] == y[1]: 0
-        else: 1*coef
-    sortSource.sort(cmp)
+        for rowNumber, cell in seriesSeq[colTable[cn]].pairs():
+            (rowNumber, fromCell(cell))
+    if ascending:
+        sortSource.sort(cmpAsc)
+    else:
+        sortSource.sort(cmpDec)
     #
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for sorted in sortSource:
-        for colName in columns:
-            result.data[colName].add(seriesSeq[colTable[colName]][sorted[0]])
+        for colIndex, colName in columns.pairs():
+            result.data[colName].add(seriesSeq[colIndex][sorted[0]])
 
 proc sort*[T](df: DataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): DataFrame =
     result = df.deepCopy()
@@ -221,8 +225,8 @@ proc duplicated*(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries
     for i in 0..<df.len:
         let row =
             collect(newSeq):
-                for colName in columns:
-                    seriesSeq[colTable[colName]][i]
+                for colIndex, colName in columns.pairs():
+                    seriesSeq[colIndex][i]
         if row in checker:
             result.add(true)
         else:
