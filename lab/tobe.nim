@@ -20,8 +20,18 @@ template timeAttack(name: static[string], body: untyped): untyped =
 
     body
 
-    echo "t: " & $(cpuTime() - tStart) & "[s]"
+    echo "t: " & $(int((cpuTime() - tStart)*1000)) & "[ms]"
 
+
+proc applyFnG(df: DataFrame): Table[ColName,Cell] =
+    var c: Cell
+    if df["name"][0] == "abc":
+        c = df["sales"].intMap(c => c/10).mean()
+    else:
+        c = df["sales"].intMap(c => c*10).mean()
+    result = {
+        "sales_changed": c
+    }.toTable()
 
 proc toBe*() =
     proc echo3[T](a: varargs[T]) =
@@ -88,6 +98,7 @@ proc toBe*() =
         )
         echo3 df1
     #
+    #[
     timeAttack("drop"):
         df.dropColumns(["time","name"]).show(true)
     #
@@ -119,11 +130,11 @@ proc toBe*() =
     #
     timeAttack("sort name"):
         df.sort("name", ascending=false).show(true)
-    timeAttack("sort sales"):
+    timeAttack("sort sales (parseInt)"):
         df.sort("sales", parseInt, ascending=true).show(true)
-    timeAttack("sort sales (dec)"):
+    timeAttack("sort sales (parseInt) (dec)"):
         df.sort("sales", parseInt, ascending=false).show(true)
-    timeAttack("sort (datetime)"):
+    timeAttack("sort time (datetime)"):
         df.datetimeSort("time", ascending=false).show(true)
     #
     timeAttack("resetIndex"):
@@ -153,16 +164,6 @@ proc toBe*() =
     timeAttack("dropDuplicates [time, sales]"):
         df.dropDuplicates(["time","sales"]).show(true)
     #
-    proc applyFnG(df: DataFrame): Table[ColName,Cell] =
-        var c: Cell
-        if df["name"][0] == "abc":
-            c = df["sales"].intMap(c => c/10).mean()
-        else:
-            c = df["sales"].intMap(c => c*10).mean()
-        result = {
-            "sales_changed": c
-        }.toTable()
-    #[
     timeAttack("groupby"):
         echo3 df.groupby(["time","name"])
     #

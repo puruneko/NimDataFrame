@@ -10,6 +10,8 @@ import re
 import math
 import encodings
 
+import threadpool
+{.experimental: "parallel".}
 
 var a = "1H"
 var matches: array[2, string]
@@ -17,22 +19,36 @@ var matches: array[2, string]
 echo match(a, re"(\d+)([a-zA-Z]+)?", matches)
 echo matches
 
-proc genIterator(a: string, b: int): iterator =
-    result =
-        iterator (): string =
-            for i in 0..<b:
-                yield a
+const N = 1000000
+proc f(x: float): float =
+    sin(2*PI*x/N)
+var tStart = cpuTime()
+var s = newSeq[float](N)
+tStart = cpuTime()
+for i in 0..<N:
+    s[i] = f(float(i))
+echo cpuTime() - tStart
 
-let itr = genIterator("abc", 10)
-for x in itr:
-    echo x
+var s2: seq[float] = @[]
+tStart = cpuTime()
+for i in 0..<N:
+    s2.add(f(float(i)))
+echo cpuTime() - tStart
 
-template `[]`(tpl, key): untyped =
-    tpl.key
+tStart = cpuTime()
+parallel:
+    for i in 0..<N:
+        s[i] = spawn f(float(i))
+echo cpuTime() - tStart
 
-var x: tuple[name: string, age: int]
-x.name = "john"
-x.age = 16
+proc term(k: float): float = 4 * math.pow(-1, k) / (2*k + 1)
 
-let n = "name"
-echo x["name"]
+proc pi(n: int): float =
+  var ch = newSeq[float](n+1)
+  parallel:
+    for k in 0..ch.high:
+      ch[k] = spawn term(float(k))
+  for k in 0..ch.high:
+    result += ch[k]
+
+echo formatFloat(pi(5000))
