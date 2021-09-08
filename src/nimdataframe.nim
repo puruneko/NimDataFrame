@@ -96,7 +96,7 @@ proc toDataFrame*(
         lineCount += 1
     #インデックスの設定
     if indexCol != "":
-        if result.getColumns().contains(indexCol):
+        if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
             raise newException(NimDataFrameError, fmt"not found {indexCol}")
@@ -144,7 +144,7 @@ proc toDataFrame*(
         lineCount += 1
     #インデックスの設定
     if indexCol != "":
-        if result.getColumns().contains(indexCol):
+        if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
             raise newException(NimDataFrameError, fmt"not found {indexCol}")
@@ -208,7 +208,7 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
                 )
     #インデックスの設定
     if indexCol != "":
-        if result.getColumns().contains(indexCol):
+        if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
             raise newException(NimDataFrameError, fmt"not found {indexCol}")
@@ -226,7 +226,7 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataF
     for (colName, s) in columns:
         result.addColumn(colName)
         for c in s.toString():
-            result.data[colName].add(c)
+            result[colName].add(c)
         c.add(colName)
         l.add(s.len)
     #長さチェック

@@ -99,6 +99,7 @@ proc toBe*() =
         echo3 df1
     #
     #[
+    ]#
     timeAttack("drop"):
         df.dropColumns(["time","name"]).show(true)
     #
@@ -126,7 +127,7 @@ proc toBe*() =
     #
     timeAttack("getRows"):
         echo3 df.getRows()
-        echo3 df.getColumns()
+        echo3 df.columns
     #
     timeAttack("sort name"):
         df.sort("name", ascending=false).show(true)
@@ -180,7 +181,6 @@ proc toBe*() =
     timeAttack("groupby apply"):
         df.groupby(["time","name"]).apply(applyFnG).show(true)
     #
-    ]#
     timeAttack("resample 5 mean"):
         df.resample(5).sum().show(true)
     #
