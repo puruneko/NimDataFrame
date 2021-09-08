@@ -4,10 +4,12 @@ type Cell* = string
 type ColName* = string
 type Row* = Table[string, Cell]
 type Series* = seq[Cell]
-type DataFrameData* = Table[ColName, Series]
 type DataFrame* = object
-    data*: DataFrameData
+    data*: seq[Series]
+    columns*: seq[ColName]
+    colTable*: Table[ColName,int]
     indexCol*: ColName
+    datetimeFormat*: string
 type FilterSeries* = seq[bool]
 type DataFrameGroupBy* = object
     data*: Table[seq[ColName], DataFrame]

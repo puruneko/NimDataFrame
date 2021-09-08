@@ -27,6 +27,7 @@ const defaultDateTimeFormat* = "yyyy-MM-dd HH:mm:ss"
 ###############################################################
 #parse... : cellに対しての型変換
 #to...    : seriesに対しての型変換
+
 proc initRow*(): Row =
     result = initTable[string, Cell]()
 
@@ -36,50 +37,49 @@ proc initSeries*(): Series =
 proc initFilterSeries*(): FilterSeries =
     result = @[]
 
+template `[]`*(df: DataFrame, colName: ColName): untyped =
+    ## DataFrameからSeriesを取り出す.
+    df.data[df.colTable[colName]]
 
-iterator columns*(df: DataFrame): string =
-    for key in df.data.keys:
-        yield key
+template `[]`*(df: DataFrame, colIndex: int): untyped =
+    ## DataFrameからSeriesを取り出す.
+    df.data[colIndex]
 
-proc getColumns*(df: DataFrame): seq[string] =
-    for column in df.columns:
-        result.add(column)
+proc addColumn*(df: var DataFrame, colName: ColName) =
+    df.data.add(initSeries())
+    df.columns.add(colName)
+    df.colTable[colName] = df.columns.len - 1
 
-proc flattenDataFrame*(df: DataFrame): (seq[Series], Table[ColName, int], seq[ColName]) =
-    ## DataFrameをsequence化して、アクセス手段と一緒に返す
-    ## (Table型のハッシュアクセスがあまりにも遅いので苦肉の策で導入した関数)
-    ## ※Table[ColName, int]をproc(colName: ColName): intに変える手もある・・・。
-    runnableExamples:
-        var (seriesSeq, colTable, columns) = flattenDataFrame(df)
-        for i in 0..<df.len:
-            for colName in columns:
-                someFunc(seriesSeq[colTable[colName]][i])
-    ## 
+proc `[]=`*[T](df: var DataFrame, colIndex: int, right: openArray[T]) =
+    ## DataFrameのSeriesに代入する.
+    ## 代入されるarrayの各値はstringにキャストされる.
+    
+    when typeof(T) is string:
+        df.data[colIndex] = right.toSeq()
+    else:
+        df.data[colIndex] = right.toString()
 
-    let columns = df.getColumns()
-    var seriesSeq: seq[Series] = @[]
-    var colTable = initTable[ColName, int]()
-    for i, colName in columns.pairs():
-        seriesSeq.add(df.data[colName])
-        colTable[colName] = i
-    return (seriesSeq, colTable, columns)
+proc `[]=`*[T](df: var DataFrame, colName: ColName, right: openArray[T]) =
+    if not df.columns.contains(colName):
+        df.addColumn(colName)
+    df[df.colTable[colName]] = right
+
+proc addColumn*(df: var DataFrame, colName: ColName, s: Series) =
+    df.addColumn(colName)
+    df[colName] = s
+
 
 iterator rows*(df: DataFrame): Row =
-    let (seriesSeq, colTable, columns) = df.flattenDataFrame()
     let maxRowNumber = min(
         collect(newSeq) do:
-            for colName in df.columns:
-                df.data[colName].len
+            for colIndex, colName in df.columns.pairs():
+                df[colIndex].len
     )
     for i in 0..<maxRowNumber:
         var row = initRow()
-        for colIndex, colName in columns.pairs():
-            row[colName] = seriesSeq[colIndex][i]
+        for colIndex, colName in df.columns.pairs():
+            row[colName] = df.data[colIndex][i]
         yield row
-
-proc getSeries*(df: DataFrame): seq[Series] =
-    for value in df.data.values:
-        result.add(value)
 
 proc getRows*(df: DataFrame): seq[Row] =
     for row in df.rows:
@@ -129,30 +129,21 @@ proc toString*[T](arr: openArray[T]): Series =
         result.add(a.parseString())
 
 
-proc `[]`*(df: DataFrame, colName: ColName): Series =
-    ## DataFrameからSeriesを取り出す.
-    df.data[colName]
-
-proc `[]=`*[T](df: var DataFrame, colName: ColName, right: openArray[T]) =
-    ## DataFrameのSeriesに代入する.
-    ## 代入されるarrayの各値はstringにキャストされる.
-    var newSeries = collect(newSeq):
-        for c in right:
-            c.parseString()
-    df.data.del(colName)
-    #df.data.add(colName, newSeries) #deprecated
-    df.data[colName] = newSeries
-
-
 proc initDataFrame*(): DataFrame =
-    result.data = initTable[ColName, Series]()
+    result.data = @[]
+    result.columns = @[]
+    result.colTable = initTable[ColName, int]()
     result.indexCol = defaultIndexName
+    result.datetimeFormat = defaultDateTimeFormat
 
 proc initDataFrame*(df: DataFrame): DataFrame =
     result = initDataFrame()
+    result.columns = df.columns
+    result.colTable = df.colTable
     result.indexCol = df.indexCol
+    result.datetimeFormat = df.datetimeFormat
     for colName in df.columns:
-        result.data[colName] = initSeries()
+        result.addColumn(colName)
 
 proc initDataFrameGroupBy*(): DataFrameGroupBy =
     result.data = initTable[seq[ColName], DataFrame]()
@@ -162,14 +153,14 @@ proc initDataFrameGroupBy*(): DataFrameGroupBy =
 proc len*(df: DataFrame): int =
     ## DataFrameの長さを返す
     ## no healthCheck
-    result = df.data[df.indexCol].len
+    result = df[df.indexCol].len
 
 proc addRow*(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
     var columns: seq[ColName] = @[]
     for colName in row.keys:
         columns.add(colName)
     let columnsHash = toHashSet(columns)
-    let dfColumnsHash = toHashSet(df.getColumns())
+    let dfColumnsHash = toHashSet(df.columns)
     if dfColumnsHash == columnsHash or
         fillEmpty or
         (autoIndex and dfColumnsHash - toHashSet([df.indexCol]) == columnsHash):
@@ -178,30 +169,30 @@ proc addRow*(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
             if not fillEmpty:
                 #autoIndexフラグ無し
                 if not autoIndex:
-                    df.data[colName].add(row[colName])
+                    df[colName].add(row[colName])
                 #autoIndexフラグあり
                 else:
                     if colName == df.indexCol:
-                        df.data[colName].add($(df.len))
+                        df[colName].add($(df.len))
                     else:
-                        df.data[colName].add(row[colName])
+                        df[colName].add(row[colName])
             #fillEmptyフラグあり
             else:
                 #autoIndexフラグ無し
                 if not autoIndex:
                     if columnsHash.contains(colName):
-                        df.data[colName].add(row[colName])
+                        df[colName].add(row[colName])
                     else:
-                        df.data[colName].add(dfEmpty)
+                        df[colName].add(dfEmpty)
                 #autoIndexフラグあり
                 else:
                     if colName == df.indexCol:
-                        df.data[colName].add($(df.len))
+                        df[colName].add($(df.len))
                     else:
                         if columnsHash.contains(colName):
-                            df.data[colName].add(row[colName])
+                            df[colName].add(row[colName])
                         else:
-                            df.data[colName].add(dfEmpty)
+                            df[colName].add(dfEmpty)
     else:
         raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
 
@@ -256,33 +247,33 @@ proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInd
                         #autoIndexフラグあり、かつ、colNameがindexCol
                         if autoIndex and colName == df.indexCol:
                             for i in 0..<length:
-                                df.data[colName].add($(dfLength+i))
+                                df[colName].add($(dfLength+i))
                         else:
                             #列名がない場合
                             if not columnsHash.contains(colName):
                                 for i in 0..<length:
-                                    df.data[colName].add(dfEmpty)
+                                    df[colName].add(dfEmpty)
                             #列名がある場合
                             else:
                                 for c in itemTable[colName]:
-                                    df.data[colName].add(c.parseString())
+                                    df[colName].add(c.parseString())
                                 for i in itemTable[colName].len..<length:
-                                    df.data[colName].add(dfEmpty)
+                                    df[colName].add(dfEmpty)
                     #fillEmptyRowフラグ無し
                     else:
                         #autoIndexフラグあり、かつ、colNameがindexCol
                         if autoIndex and colName == df.indexCol:
                             for i in 0..<length:
-                                df.data[colName].add($(dfLength+i))
+                                df[colName].add($(dfLength+i))
                         else:
                             #列名がない場合
                             if not columnsHash.contains(colName):
                                 for i in 0..<length:
-                                    df.data[colName].add(dfEmpty)
+                                    df[colName].add(dfEmpty)
                             #列名がある場合
                             else:
                                 for c in itemTable[colName]:
-                                    df.data[colName].add(c.parseString())
+                                    df[colName].add(c.parseString())
                 #fillEmptyColフラグ無し
                 else:
                     #fillEmptyRowフラグあり
@@ -290,21 +281,21 @@ proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInd
                         #autoIndexフラグあり、かつ、colNameがindexCol
                         if autoIndex and colName == df.indexCol:
                             for i in 0..<length:
-                                df.data[colName].add($(dfLength+i))
+                                df[colName].add($(dfLength+i))
                         else:
                             for c in itemTable[colName]:
-                                df.data[colName].add(c.parseString())
+                                df[colName].add(c.parseString())
                             for i in itemTable[colName].len..<length:
-                                df.data[colName].add(dfEmpty)
+                                df[colName].add(dfEmpty)
                     #fillEmptyRowフラグ無し
                     else:
                         #autoIndexフラグあり、かつ、colNameがindexCol
                         if autoIndex and colName == df.indexCol:
                             for i in 0..<length:
-                                df.data[colName].add($(dfLength+i))
+                                df[colName].add($(dfLength+i))
                         else:
                             for c in itemTable[colName]:
-                                df.data[colName].add(c.parseString())
+                                df[colName].add(c.parseString())
         else:
             raise newException(NimDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
     else:
@@ -327,13 +318,13 @@ proc addColumns*[T](df: var DataFrame, columns: openArray[(ColName, seq[T])], fi
             for colName in columnTable.keys:
                 for i in 0..<dfLength:
                     if i < colLength:
-                        df.data[colName].add(columnTable[colName][i].parseString())
+                        df[colName].add(columnTable[colName][i].parseString())
                     else:
-                        df.data[colName].add(dfEmpty)
+                        df[colName].add(dfEmpty)
         else:
             for colName in columnTable.keys:
                 for i in 0..<dfLength:
-                    df.data[colName].add(columnTable[colName][i].parseString())
+                    df[colName].add(columnTable[colName][i].parseString())
     else:
         if lengthHash.len != 1:
             raise newException(NimDataFrameError, "argument 'columns' must be same length")
@@ -344,37 +335,33 @@ proc addColumns*[T](df: var DataFrame, columns: openArray[(ColName, seq[T])], fi
 
 proc deepCopy*(df: DataFrame): DataFrame =
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<df.len:
-        for colIndex, colName in columns.pairs():
-            result.data[colName].add(seriesSeq[colIndex][i])
+        for colIndex, colName in df.columns.pairs():
+            result[colName].add(df[colIndex][i])
 
 proc `[]`*(df: DataFrame, colNames: openArray[ColName]): DataFrame =
     ## 指定した列だけ返す.
     result = initDataFrame()
-    let columns = df.getColumns()
     for colName in colNames:
-        if not columns.contains(colName):
+        if not df.columns.contains(colName):
             raise newException(NimDataFrameError, fmt"df doesn't have column {colName}")
-        result.data[colName] = df[colName]
-    result.data[df.indexCol] = df[df.indexCol]
+        result[colName] = df[colName]
+    result[df.indexCol] = df[df.indexCol]
 
 proc keep*(df: DataFrame, fs: FilterSeries): DataFrame =
     ## trueをkeepする（fsがtrueの行だけ返す）.
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
-    for colIndex, colName in columns.pairs():
+    for colIndex, colName in df.columns.pairs():
         for i, b in fs.pairs():
             if b:
-                result.data[colName].add(seriesSeq[colIndex][i])
+                result[colIndex].add(df[colIndex][i])
 proc drop*(df: DataFrame, fs: FilterSeries): DataFrame =
     ## trueをdropする（fsがtrueの行を落として返す）（fsがfalseの行だけ返す）.
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
-    for colIndex, colName in columns.pairs():
+    for colIndex, colName in df.columns.pairs():
         for i, b in fs.pairs():
             if not b:
-                result.data[colName].add(seriesSeq[colIndex][i])
+                result[colIndex].add(df[colIndex][i])
 
 proc `[]`*(df: DataFrame, fs: FilterSeries): DataFrame =
     ## fsがtrueの行だけ返す.
@@ -383,65 +370,92 @@ proc `[]`*(df: DataFrame, fs: FilterSeries): DataFrame =
 proc `[]`*(df: DataFrame, slice: HSlice[int, int]): DataFrame =
     ## sliceの範囲の行だけ返す.
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
-    let len = df.len
+    let dfLen = df.len
     for i in slice:
-        if i < 0 or i >= len:
+        if i < 0 or i >= dfLen:
             continue
-        for colIndex, colName in columns.pairs():
-            result.data[colName].add(seriesSeq[colIndex][i])
+        for colIndex, colName in df.columns.pairs():
+            result[colIndex].add(df[colIndex][i])
 
 proc `[]`*(df: DataFrame, indices: openArray[int]): DataFrame =
     ## indicesの行だけ返す.
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
-    let len = df.len
+    let dfLen = df.len
     for i in indices:
-        if i < 0 or i >= len:
+        if i < 0 or i >= dfLen:
             continue
-        for colIndex, colName in columns.pairs():
-            result.data[colName].add(seriesSeq[colIndex][i])
+        for colIndex, colName in df.columns.pairs():
+            result[colIndex].add(df[colIndex][i])
 
 proc iloc*(df: DataFrame, i: int): Row =
     ## index番目の行をRow形式で返す.
     result = initRow()
-    for colName in df.columns:
-        result[colName] = df.data[colName][i]
+    for colIndex, colName in df.columns.pairs():
+        result[colName] = df[colIndex][i]
 
 proc loc*(df: DataFrame, c: Cell): DataFrame =
     ## indexの行の値がcの値と一致する行を返す.
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<df.len:
         if df[df.indexCol][i] == c:
-            for colIndex, colName in columns.pairs():
-                result.data[colName].add(seriesSeq[colIndex][i])
+            for colIndex, colName in df.columns.pairs():
+                result[colIndex].add(df[colIndex][i])
 
 proc head*(df: DataFrame, num: int): DataFrame =
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<min(num,df.len):
-        for colIndex, colName in columns.pairs():
-            result.data[colName].add(seriesSeq[colIndex][i])
+        for colIndex, colName in df.columns.pairs():
+            result[colIndex].add(df[colIndex][i])
 proc tail*(df: DataFrame, num: int): DataFrame =
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in df.len-min(num,df.len)..<df.len:
-        for colIndex, colName in columns.pairs():
-            result.data[colName].add(seriesSeq[colIndex][i])
+        for colIndex, colName in df.columns.pairs():
+            result[colIndex].add(df[colIndex][i])
 
 proc index*(df: DataFrame): Series =
     df[df.indexCol]
 
 proc shape*(df: DataFrame): (int,int) =
-    let colNumber = df.getColumns.len
+    let colNumber = df.columns.len
     let rowNumber = df.len
     result = (rowNumber, colNumber)
 
 proc size*(df: DataFrame, excludeIndex=false): int =
     result = df.len * (
         if excludeIndex:
-            df.getColumns().len - 1
+            df.columns.len - 1
         else:
-            df.getColumns().len
+            df.columns.len
     )
+
+proc deleteColumns*(df: var DataFrame, colNames: openArray[ColName]) =
+    ## 指定のDataFrameの列を削除する.
+    runnableExamples:
+        df.deleteColumns(["col1","col2"])
+    ##
+
+    for colName in colNames:
+        let itr = df.colTable[colName]
+        df.data.delete(itr)
+        df.columns.delete(itr)
+        df.colTable.del(colName)
+        for cn in df.columns[itr..high(df.columns)]:
+            df.colTable[cn] -= 1
+
+proc deleteColumn*(df: var DataFrame, colName: ColName) =
+    df.deleteColumns([colName])
+
+proc dropColumns*(df:DataFrame, colNames: openArray[ColName]): DataFrame =
+    ## 指定のDataFrameの列を削除する.
+    runnableExamples:
+        df.dropColumns(["col1","col2"])
+    ##
+
+    result = df
+    for colName in colNames:
+        let itr = result.colTable[colName]
+        result.data.delete(itr)
+        result.columns.delete(itr)
+        result.colTable.del(colName)
+        for cn in result.columns[itr..high(result.columns)]:
+            result.colTable[cn] -= 1

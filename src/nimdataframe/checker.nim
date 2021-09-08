@@ -6,7 +6,7 @@ import core
 
 proc healthCheck*(df: DataFrame, raiseException=false): bool{.discardable.} =
     #indexColチェック
-    if not df.getColumns().contains(df.indexCol):
+    if not df.columns.contains(df.indexCol):
         if raiseException:
             raise newException(NimDataFrameError, fmt"not found index column '{df.indexCol}' in DataFrame")
         return false

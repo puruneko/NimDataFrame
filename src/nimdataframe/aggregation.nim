@@ -34,15 +34,15 @@ proc concat*(dfs: openArray[DataFrame]): DataFrame =
     )
     #DataFrameの連結
     for colName in columns:
-        result.data[colName] = initSeries()
+        result.addColumn(colName)
     for df in dfs:
         for colName in columns:
-            if df.data.contains(colName):
-                for c in df.data[colName]:
-                    result.data[colName].add(c)
+            if df.columns.contains(colName):
+                for c in df[colName]:
+                    result[colName].add(c)
             else:
                 for i in 0..<df.len:
-                    result.data[colName].add(dfEmpty)
+                    result[colName].add(dfEmpty)
     result.indexCol = dfs[^1].indexCol
 
 proc indexOf[T](s: openArray[T], key: T): int =

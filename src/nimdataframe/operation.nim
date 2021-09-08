@@ -25,35 +25,24 @@ proc fillEmpty*[T](s: Series, fill: T): Series =
 
 proc fillEmpty*[T](df: DataFrame, fill: T): DataFrame =
     result = initDataFrame(df)
-    for colName in result.columns:
-        result[colName] = fillEmpty(df[colName], fill)
+    for colIndex, colName in result.columns.paris():
+        result[colIndex] = fillEmpty(df[colIndex], fill)
 
 proc dropEmpty*(df: DataFrame): DataFrame =
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     for i in 0..<df.len:
         var skip = false
-        for colIndex, colName in columns.pairs():
-            if seriesSeq[colIndex][i] == dfEmpty:
+        for colIndex, colName in result.columns.pairs():
+            if df[colIndex][i] == dfEmpty:
                 skip = true
                 break
         if skip:
             continue
-        for colIndex, colName in columns.pairs():
-            result.data[colName].add(seriesSeq[colIndex][i])
+        for colIndex, colName in result.columns.pairs():
+            result[colIndex].add(df[colIndex][i])
 
 
 ###############################################################
-proc dropColumns*(df:DataFrame, colNames: openArray[ColName]): DataFrame =
-    ## 指定のDataFrameの列を削除する.
-    runnableExamples:
-        df.dropColumns(["col1","col2"])
-    ##
-
-    result = df
-    for colName in colNames:
-        result.data.del(colName)
-
 proc renameColumns*(df: DataFrame, renameMap: openArray[(ColName,ColName)]): DataFrame =
     ## DataFrameの列名を変更する.
     ## renameMapには変更前列名と変更後列名のペアを指定する.
@@ -63,9 +52,9 @@ proc renameColumns*(df: DataFrame, renameMap: openArray[(ColName,ColName)]): Dat
 
     result = df
     for renamePair in renameMap:
-        if result.data.contains(renamePair[0]):
-            result.data[renamePair[1]] = result[renamePair[0]]
-            result.data.del(renamePair[0])
+        if result.columns.contains(renamePair[0]):
+            result[renamePair[1]] = result[renamePair[0]]
+            result.deleteColumn(renamePair[0])
             #インデックス列が書き換えられたときはインデックス情報を更新する
             if renamePair[0] == df.indexCol:
                 result.indexCol = renamePair[1]
@@ -73,14 +62,14 @@ proc renameColumns*(df: DataFrame, renameMap: openArray[(ColName,ColName)]): Dat
 
 proc resetIndex*[T](df: DataFrame, fn: int -> T): DataFrame =
     result = initDataFrame(df)
-    for colName in df.columns:
+    for colIndex, colName in df.columns.pairs():
         if colName == df.indexCol:
-            result.data[colName] =
+            result[colName] =
                 collect(newSeq):
                     for i in 0..<df.len:
                         fn(i).parseString()
         else:
-            result.data[colName] = df.data[colName]
+            result[colIndex] = df[colIndex]
 
 proc resetIndex*(df: DataFrame): DataFrame =
     let f = proc(i: int): Cell = $i
@@ -119,15 +108,15 @@ proc replace*(df: DataFrame, sub: string, by: string): DataFrame =
     result = initDataFrame(df)
     proc f(c: Cell): Cell =
         c.replace(sub, by)
-    for colName in df.columns:
-        result.data[colName] = df[colName].map(f)
+    for colIndex, colName in df.columns.pairs():
+        result[colIndex] = df[colIndex].map(f)
 
 proc replace*(df: DataFrame, sub: Regex, by: string): DataFrame =
     result = initDataFrame(df)
     proc f(c: Cell): Cell =
         c.replacef(sub, by)
-    for colName in df.columns:
-        result.data[colName] = df[colName].map(f)
+    for colIndex, colName in df.columns.pairs():
+        result.data[colIndex] = df[colIndex].map(f)
 
 
 ###############################################################
@@ -158,23 +147,23 @@ proc sort*[T](df: DataFrame, colName: ColName = "", fromCell: Cell -> T, ascendi
     ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する.
     ##
     result = initDataFrame(df)
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
     let cn =
         if colName != "":
             colName
         else:
             df.indexCol
-    var sortSource = collect(newSeq):
-        for rowNumber, cell in seriesSeq[colTable[cn]].pairs():
-            (rowNumber, fromCell(cell))
+    var sortSource =
+        collect(newSeq):
+            for rowNumber, cell in df[df.colTable[cn]].pairs():
+                (rowNumber, fromCell(cell))
     if ascending:
         sortSource.sort(cmpAsc)
     else:
         sortSource.sort(cmpDec)
     #
     for sorted in sortSource:
-        for colIndex, colName in columns.pairs():
-            result.data[colName].add(seriesSeq[colIndex][sorted[0]])
+        for colIndex, colName in df.columns.pairs():
+            result[colIndex].add(df[colIndex][sorted[0]])
 
 proc sort*[T](df: DataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): DataFrame =
     result = df.deepCopy()
@@ -217,7 +206,7 @@ proc duplicated*(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries
     ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス）.
     ##
     result = initFilterSeries()
-    var (seriesSeq, colTable, columns) = df.flattenDataFrame()
+    var columns = colNames.toSeq()
     var checker = initTable[seq[string], bool]()
     if columns.len == 0:
         columns = @[df.indexCol]
@@ -225,8 +214,8 @@ proc duplicated*(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries
     for i in 0..<df.len:
         let row =
             collect(newSeq):
-                for colIndex, colName in columns.pairs():
-                    seriesSeq[colIndex][i]
+                for colName in columns:
+                    df[colName][i]
         if row in checker:
             result.add(true)
         else:
@@ -245,21 +234,20 @@ proc transpose*(df: DataFrame): DataFrame =
     if df.duplicated().contains(true):
         raise newException(NimDataFrameError, "duplicate indexes are not allowed in transpose action")
     #転置処理
-    let columns = df.getColumns()
     let colNameTable =
         collect(initTable):
-            for i, colName in columns.pairs():
+            for i, colName in df.columns.pairs():
                 {i: colName}
     for indexValue in df[df.indexCol]:
-        result.data[indexValue] = initSeries()
+        result.addColumn(indexValue)
         let dfRow = df.loc(indexValue)
-        for i in 0..<columns.len:
+        for i in 0..<df.columns.len:
             if colNameTable[i] == df.indexCol:
                 continue
-            result.data[indexValue].add(dfRow[colNameTable[i]][0])
-    result.data[result.indexCol] =
+            result[indexValue].add(dfRow[colNameTable[i]][0])
+    result[result.indexCol] =
         collect(newSeq):
-            for colName in columns:
+            for colName in df.columns:
                 if colName == df.indexCol:
                     continue
                 colName

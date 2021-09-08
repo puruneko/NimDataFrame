@@ -148,7 +148,7 @@ proc agg*[T](df: DataFrame, aggFn: Series -> T): Row =
     ##
 
     result = initRow(df)
-    for (colName, s) in df.data.pairs():
+    for (colName, s) in zip(df.columns, df.data):
         result[colName] = aggFn(s).parseString()
 
 proc count*(df: DataFrame): Row =
