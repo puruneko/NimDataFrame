@@ -143,8 +143,11 @@ proc initDataFrame*(df: DataFrame): DataFrame =
     for colName in df.columns:
         result.addColumn(colName)
 
-proc initDataFrameGroupBy*(): DataFrameGroupBy =
-    result.data = initTable[seq[ColName], DataFrame]()
+proc initDataFrameGroupBy*(df: DataFrame): DataFrameGroupBy =
+    result.df = df
+    result.group = @[]
+    result.multiIndex = @[]
+    result.multiIndexTable = initTable[seq[ColName],int]()
     result.columns = @[]
 
 

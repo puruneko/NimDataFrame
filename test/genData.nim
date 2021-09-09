@@ -2,7 +2,7 @@ import sugar
 import random
 import times
 
-const N = 100000
+const N = 50000
 
 proc getAlphabet(): string =
     $(sample("abcdefghijklmnopqrstuvwxyz"))

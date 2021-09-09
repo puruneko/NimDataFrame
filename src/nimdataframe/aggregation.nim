@@ -217,30 +217,34 @@ proc join*(dfSource: DataFrame, df: DataFrame, how="left"): DataFrame =
 proc groupby*(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
     ## DataFrameを指定の列の値でグループ化する（戻り値はDataFrameGroupBy型）.
     ## 
-    result = initDataFrameGroupBy()
+    
+    let tStart = cpuTime()
+    result = initDataFrameGroupBy(df)
     #マルチインデックスの作成
-    let multiIndex = toHashSet(
-        collect(newSeq) do:
+    let multiIndex =
+        collect(newSeq):
             for i in 0..<df.len:
                 var index: seq[Cell] = @[]
                 for colName in colNames:
-                    index.add(df[df.colTable[colName]][i])
+                    index.add(df[colName][i])
                 index
-    )
+    let multiIndexSet = toHashSet(multiIndex).toSeq()
+    echo cpuTime() - tStart
     #データのグループ化
     result.indexCol = df.indexCol
     result.columns = colNames.toSeq()
-    for mi in multiIndex:
-        result.data[mi] = initDataFrame(df)
-    for i in 0..<df.len:
-        let mi =
-            collect(newSeq):
-                for specifiedColName in colNames:
-                    df[df.colTable[specifiedColName]][i]
+    var i = 0
+    for mi in multiIndexSet:
+        result.group.add(@[])
+        result.multiIndexTable[mi] = i
+        i.inc()
+    echo cpuTime() - tStart
+    for i, mi in multiIndex.pairs():
         for colIndex, colName in df.columns.pairs():
-            result.data[mi][colName].add(df[colIndex][i])
+            result.group[result.multiIndexTable[mi]].add(i)
+    result.multiIndex = multiIndexSet
 
-proc agg*[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): DataFrame =
+proc agg*[T](dfg: DataFrameGroupBy, aggFn: openArray[(ColName,Series -> T)]): DataFrame =
     ## groupbyしたDataFrameの指定列に対して関数を実行する.
     ## 指定する関数に{.closure.}オプションをつけないとエラーになる.
     runnableExamples:
@@ -250,22 +254,24 @@ proc agg*[T](dfg: DataFrameGroupBy, aggFn: openArray[(string,Series -> T)]): Dat
     ##
 
     result = initDataFrame()
+    for (colName, _) in aggFn:
+        result.addColumn(colName)
     #関数の適用
-    var rows: seq[Row] = @[]
-    for mi in dfg.data.keys:
+    for miIndex, mi in dfg.multiIndex.pairs():
         #関数の計算
-        var row = initRow()
         for (colName, fn) in aggFn:
-            row[colName] = fn(dfg.data[mi][colName]).parseString()
+            var s = initSeries()
+            for j in dfg.group[miIndex]:
+                s.add(dfg.df[colName][j])
+            result[colName].add(fn(s).parseString())
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
-            row[colName] = colValue
-        rows.add(row)
-    #結合
-    for colName in rows[0].keys:
-        result[colName] = initSeries()
-    for row in rows:
-        result.addRow(row)
+            if not result.columns.contains(colName):
+                result.addColumn(colName)
+            if result[colName].len - 1 == miIndex:
+                result[colName][miIndex] = colValue
+            else:
+                result[colName].add(colValue)
     result.indexCol = dfg.columns[0]
 
 proc agg*(dfg: DataFrameGroupBy, aggFn: DataFrame -> Row): DataFrame =
@@ -275,22 +281,27 @@ proc agg*(dfg: DataFrameGroupBy, aggFn: DataFrame -> Row): DataFrame =
         df.groupby(["col1","col2"]).agg(sum)
     ##
 
-    result = initDataFrame()
+    result = initDataFrame(dfg.df)
     #関数の適用
-    var rows: seq[Row] = @[]
-    for mi in dfg.data.keys:
+    let dfDummy = dfg.df[[1,2,3,4]]
+    var t = cpuTime()
+    var a = 0.0
+    var b = 0.0
+    for miIndex, mi in dfg.multiIndex.pairs():
         #統計値の計算
-        var row = aggFn(dfg.data[mi])
+        #var row = aggFn(dfg.df[dfg.group[miIndex]])
+        var row = aggFn(dfDummy)
+        a += cpuTime() - t
+        t = cpuTime()
+        for colName in row.keys:
+            result[colName].add(row[colName])
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
-            row[colName] = colValue
-        rows.add(row)
-    #結合
-    for colName in rows[0].keys:
-        result[colName] = initSeries()
-    for row in rows:
-        result.addRow(row)
+            result[colName][miIndex] = colValue
+        b += cpuTime() - t
+        t = cpuTime()
     result.indexCol = dfg.columns[0]
+    echo a, b
 
 proc count*(dfg: DataFrameGroupBy): DataFrame =
     dfg.agg(count)
@@ -324,18 +335,18 @@ proc apply*[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): D
     ##
 
     result = initDataFrame()
-    var dfs: seq[DataFrame] = @[]
-    for mi in dfg.data.keys:
+    for mi in dfg.multiIndex:
         #関数の計算
-        var df = initDataFrame()
-        var applyTable = applyFn(dfg.data[mi])
+        var applyTable = applyFn(dfg.df[dfg.group[dfg.multiIndexTable[mi]]])
         for (colName, c) in applyTable.pairs():
-            df[colName] = @[c.parseString()]
+            if not result.columns.contains(colName):
+                result.addColumn(colName)
+            result[colName].add(c.parseString())
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
-            df[colName] = @[colValue]
-        dfs.add(df)
-    result = concat(dfs = dfs)
+            if not result.columns.contains(colName):
+                result.addColumn(colName)
+            result[colName].add(colValue)
     result.indexCol = dfg.columns[0]
 
 
@@ -409,8 +420,6 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
             else:
                 for colName in dfre.data.columns:
                     result.addColumn(colName)
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                var dfs: seq[DataFrame] = @[]
             #各行をwindow飛ばしで処理する
             var indexSeries: seq[Cell] = newSeq[Cell](resampleLen)
             var index = 0
@@ -423,8 +432,6 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
 
                 indexSeries[index] = dfre.data[dfre.data.indexCol][i]
                 index.inc()
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                result = concat(dfs = dfs)
             result.indexCol = dfre.data.indexCol
             result[dfre.data.indexCol] = indexSeries
         #datetime範囲指定の場合
@@ -444,8 +451,6 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
             echo cpuTime() - tStart
             let getInterval = genGetInterval(datetimeId)
             let startDatetime = flattenDatetime(datetimes[0], datetimeId)
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                var dfs: seq[DataFrame] = @[]
             when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
                 for (colName, _) in fn:
                     result.addColumn(colName)
@@ -477,8 +482,6 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                 body
 
                 indexSeries[index] = startDatetime + getInterval(interval-w)
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                result = concat(dfs = dfs)
             result.indexCol = dfre.data.indexCol
             result[dfre.data.indexCol] = indexSeries[0..<index].toString()
         #指定フォーマットでない場合
@@ -548,17 +551,17 @@ proc apply*[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): Data
 
     resampleAggTemplate:
         #applyFnに渡すDataFrame作成
-        var df1 = initDataFrame(dfre.data)
+        var dfTemp = initDataFrame(dfre.data)
         if slice.b >= dataLen:
             slice.b = dataLen-1
         for colIndex, colName in dfre.data.columns.pairs():
-            df1[colName] = dfre.data[colIndex][slice]
+            dfTemp[colName] = dfre.data[colIndex][slice]
         #applyFn適用
-        var applyTable = fn(df1)
-        var df2 = initDataFrame()
+        var applyTable = fn(dfTemp)
         for (colName, c) in applyTable.pairs():
-            df2[colName] = @[c.parseString()]
-        dfs.add(df2)
+            if not result.columns.contains(colName):
+                result.addColumn(colName)
+            result[colName].add(c.parseString())
 
 
 ###############################################################
@@ -595,8 +598,6 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
                 for colName in dfro.data.columns:
                     result.addColumn(colName)
             var index: seq[Cell] = @[]
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                var dfs: seq[DataFrame] = @[]
             for colName in dfro.data.columns:
                 for i in 0..<w-1:
                     result[colName].add(dfEmpty)
@@ -610,8 +611,6 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
                 body
 
                 index.add(dfro.data[dfro.data.indexCol][i])
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                result = concat(dfs = dfs)
             result.indexCol = dfro.data.indexCol
             result[dfro.data.indexCol] = index
         #datetime範囲指定の場合
@@ -627,8 +626,6 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
             let datetimes = dfro.data[dfro.data.indexCol].toDatetime()
             let getInterval = genGetInterval(datetimeId)
             var index: seq[DateTime] = @[]
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                var dfs: seq[DataFrame] = @[]
             #DateTime型に変換したindexを上から順にみていく
             when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
                 for (colName, _) in fn:
@@ -650,8 +647,6 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
                 body
 
                 index.add(dt)
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                result = concat(dfs = dfs)
             result.indexCol = dfro.data.indexCol
             result[dfro.data.indexCol] = index.toString()
         #指定フォーマットでない場合
@@ -717,14 +712,14 @@ proc apply*[T](dfro: DataFrameRolling, fn: DataFrame -> Table[ColName,T]): DataF
 
     rollingAggTemplate:
         #applyFnに渡すDataFrame作成
-        var df1 = initDataFrame(dfro.data)
+        var dfTemp = initDataFrame(dfro.data)
         if slice.b >= dataLen:
             slice.b = dataLen-1
-        for colName in result.columns:
-            df1[colName] = dfro.data[colName][slice]
+        for colName in dfro.data.columns:
+            dfTemp[colName] = dfro.data[colName][slice]
         #applyFn適用
-        var applyTable = fn(df1)
-        var df2 = initDataFrame()
+        var applyTable = fn(dfTemp)
         for (colName, c) in applyTable.pairs():
-            df2[colName] = @[c.parseString()]
-        dfs.add(df2)
+            if not result.columns.contains(colName):
+                result.addColumn(colName)
+            result[colName].add(c.parseString())

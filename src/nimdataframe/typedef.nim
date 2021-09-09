@@ -12,7 +12,10 @@ type DataFrame* = object
     datetimeFormat*: string
 type FilterSeries* = seq[bool]
 type DataFrameGroupBy* = object
-    data*: Table[seq[ColName], DataFrame]
+    df*: DataFrame
+    group*: seq[seq[int]]
+    multiIndex*: seq[seq[ColName]]
+    multiIndexTable*: Table[seq[ColName], int]
     indexCol*: ColName
     columns*: seq[ColName]
 type DataFrameResample* = object
