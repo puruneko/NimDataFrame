@@ -274,7 +274,7 @@ proc agg*[T](dfg: DataFrameGroupBy, aggFn: openArray[(ColName,Series -> T)]): Da
                 result[colName].add(colValue)
     result.indexCol = dfg.columns[0]
 
-proc agg*(dfg: DataFrameGroupBy, aggFn: DataFrame -> Row): DataFrame =
+proc agg*(dfg: DataFrameGroupBy, aggFn: Series -> Cell): DataFrame =
     ## groupbyしたDataFrameに対して統計量を計算する.
     ## aggFnにはDataFrameの統計量を計算する関数を指定する.
     runnableExamples:
@@ -282,22 +282,25 @@ proc agg*(dfg: DataFrameGroupBy, aggFn: DataFrame -> Row): DataFrame =
     ##
 
     result = initDataFrame(dfg.df)
+    for colIndex, colName in result.columns.pairs():
+        result[colIndex] = newSeq[Cell](dfg.multiIndex.len)
     #関数の適用
-    let dfDummy = dfg.df[[1,2,3,4]]
     var t = cpuTime()
     var a = 0.0
     var b = 0.0
-    for miIndex, mi in dfg.multiIndex.pairs():
+    for i, mi in dfg.multiIndex.pairs():
         #統計値の計算
-        #var row = aggFn(dfg.df[dfg.group[miIndex]])
-        var row = aggFn(dfDummy)
+        for colIndex, colName in dfg.df.columns.pairs():
+            var s =
+                collect(newSeq):
+                    for j in dfg.group[i]:
+                        dfg.df[colIndex][j]
+            result[colIndex][i] = aggFn(s)
         a += cpuTime() - t
         t = cpuTime()
-        for colName in row.keys:
-            result[colName].add(row[colName])
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
-            result[colName][miIndex] = colValue
+            result[colName][i] = colValue
         b += cpuTime() - t
         t = cpuTime()
     result.indexCol = dfg.columns[0]
