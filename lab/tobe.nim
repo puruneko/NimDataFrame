@@ -34,10 +34,17 @@ proc applyFnG(df: DataFrame): Table[ColName,Cell] =
     }.toTable()
 
 proc toBe*() =
-    proc echo3[T](a: varargs[T]) =
-        discard
-    proc show(a: DataFrame, b: bool) =
-        discard
+    const huge = false
+
+    when huge:
+        proc echo3[T](a: varargs[T]) =
+            discard
+        proc show(a: DataFrame, b: bool) =
+            discard
+    else:
+        proc echo3[T](a: varargs[T]) =
+            echo(a)
+
     const filename = "./test/sample.csv"
     var fp: File
     let openOk = fp.open(filename, fmRead)
@@ -46,7 +53,7 @@ proc toBe*() =
         quit(fmt"{filename} open failed.")
     let csv = fp.readAll()
     #
-    timeAttack("df (1)################################"):
+    timeAttack("df (1)"):
         var df = toDataFrame(
             text=csv,
             headers=["time","name","sales","日本語","dummy"],
@@ -54,7 +61,7 @@ proc toBe*() =
         )
         df.show(true)
     #
-    timeAttack("df (2)################################"):
+    timeAttack("df (2)"):
         df = toDataFrame(
             text=csv,
             headerLineNumber=1,
@@ -73,10 +80,9 @@ proc toBe*() =
             text=csv_huge,
             headerLineNumber=1,
         )
-        echo3 ""
-        echo3 df_huge.toCsv()
 
-        df = df_huge
+        when huge:
+            df = df_huge
     #
     timeAttack("dropEmpty"):
         df.dropEmpty().show(true)
