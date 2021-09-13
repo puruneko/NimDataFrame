@@ -30,7 +30,8 @@ proc applyFnG(df: DataFrame): Table[ColName,Cell] =
     else:
         c = df["sales"].intMap(c => c*10).mean()
     result = {
-        "sales_changed": c
+        "name": df["name"][0],
+        "sales_changed": c,
     }.toTable()
 
 proc toBe*() =

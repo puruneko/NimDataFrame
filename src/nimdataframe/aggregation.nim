@@ -339,7 +339,10 @@ proc apply*[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): D
         for (colName, colValue) in zip(dfg.columns, mi):
             if not result.columns.contains(colName):
                 result.addColumn(colName)
-            result[colName].add(colValue)
+            if applyTable.contains(colName):
+                result[colName][^1] = colValue
+            else:
+                result[colName].add(colValue)
     result.indexCol = dfg.columns[0]
     result.healthCheck(raiseException=true)
 
