@@ -6,12 +6,12 @@ import core
 
 proc healthCheck*(df: DataFrame, raiseException=false): bool{.discardable.} =
     #indexColチェック
-    if not df.getColumns().contains(df.indexCol):
+    if not df.columns.contains(df.indexCol):
         if raiseException:
             raise newException(NimDataFrameError, fmt"not found index column '{df.indexCol}' in DataFrame")
         return false
     #Seriesの長さチェック
-    let length = df.len()
+    let length = df.len
     for colName in df.columns:
         if df[colName].len != length:
             if raiseException:

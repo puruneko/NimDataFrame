@@ -80,7 +80,7 @@ proc toDataFrame*(
     ##
     result = initDataFrame()
     for colName in headers:
-        result[colName] = initSeries()
+        result.addColumn(colName)
     #エンコード変換
     let ec = open("utf-8", encoding)
     defer: ec.close()
@@ -92,16 +92,16 @@ proc toDataFrame*(
         if row.len != headers.len:
             raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len} (line {lineCount+1})")
         for (item, colName) in zip(row, headers):
-            result.data[colName].add(item)
+            result[colName].add(item)
         lineCount += 1
     #インデックスの設定
     if indexCol != "":
-        if result.getColumns().contains(indexCol):
+        if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
             raise newException(NimDataFrameError, fmt"not found {indexCol}")
     else:
-        result.data[defaultIndexName] =
+        result[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<lineCount: $i
     result.healthCheck(raiseException=true)
@@ -133,23 +133,23 @@ proc toDataFrame*(
     for i in 0..<headerLineNumber:
         headers = rowItr()
     for colName in headers:
-        result[colName] = initSeries()
+        result.addColumn(colName)
     #テキストデータの変換
     var lineCount = 0
     for row in rowItr:
         if row.len != headers.len:
             raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len} (line {lineCount+1})")
         for (item, colName) in zip(row, headers):
-            result.data[colName].add(item)
+            result[colName].add(item)
         lineCount += 1
     #インデックスの設定
     if indexCol != "":
-        if result.getColumns().contains(indexCol):
+        if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
             raise newException(NimDataFrameError, fmt"not found {indexCol}")
     else:
-        result.data[defaultIndexName] =
+        result[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<lineCount: $i
     result.healthCheck(raiseException=true)
@@ -179,10 +179,10 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
     if colNames.len > 0:
         if colCount <= colNames.len:
             for colName in colNames:
-                result[colName] = initSeries()
+                result.addColumn(colName)
             for row in rows:
                 for colNumber, colName in colNames.pairs():
-                    result.data[colName].add(
+                    result[colName].add(
                         if colNumber < row.len:
                             row[colNumber].parseString()
                         else:
@@ -197,10 +197,10 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
             for i in 0..<colCount:
                 fmt"col{i}"
         for colName in colNames2:
-            result[colName] = initSeries()
+            result.addColumn(colName)
         for row in rows:
             for colNumber, colName in colNames2.pairs():
-                result.data[colName].add(
+                result[colName].add(
                     if colNumber < row.len:
                         row[colNumber].parseString()
                     else:
@@ -208,7 +208,7 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
                 )
     #インデックスの設定
     if indexCol != "":
-        if result.getColumns().contains(indexCol):
+        if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
             raise newException(NimDataFrameError, fmt"not found {indexCol}")
@@ -224,9 +224,9 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataF
     var l: seq[int] = @[]
     #代入
     for (colName, s) in columns:
-        result[colName] = initSeries()
+        result.addColumn(colName)
         for c in s.toString():
-            result.data[colName].add(c)
+            result[colName].add(c)
         c.add(colName)
         l.add(s.len)
     #長さチェック
@@ -248,8 +248,7 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataF
 proc toCsv*(df: DataFrame): string =
     var lines: seq[string] = @[]
     var line: seq[string] = @[]
-    let (seriesSeq, colTable, columns) = df.flattenDataFrame()
-    for colName in columns:
+    for colName in df.columns:
         if colName.contains({',','\n','\r'}):
             line.add("\"" & colName & "\"")
         else:
@@ -257,11 +256,11 @@ proc toCsv*(df: DataFrame): string =
     lines.add(line.join(","))
     for i in 0..<df.len:
         line = @[]
-        for colName in columns:
-            if seriesSeq[colTable[colName]][i].contains({',','\n','\r'}):
-                line.add("\"" & seriesSeq[colTable[colName]][i] & "\"")
+        for colIndex, colName in df.columns.pairs():
+            if df[colIndex][i].contains({',','\n','\r'}):
+                line.add("\"" & df[colIndex][i] & "\"")
             else:
-                line.add(seriesSeq[colTable[colName]][i])
+                line.add(df[colIndex][i])
         lines.add(line.join(","))
     result = lines.join("\n")
 
@@ -283,6 +282,7 @@ proc toCsv*(df: DataFrame, writableStrem: Stream, encoding="utf-8") =
 
 proc toFigure*(df: DataFrame, indexColSign=false): string =
     result = ""
+    var columns = df.columns
     #空のデータフレームの場合
     if df[df.indexCol].len == 0:
         result &= "+-------+\n"
@@ -290,19 +290,18 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
         result &= "+-------+"
     #空ではない場合
     else:
-        var (seriesSeq, colTable, columns) = df.flattenDataFrame()
         for i, colName in columns.pairs():
             if colName == df.indexCol:
                 columns.del(i)
                 columns = concat(@[df.indexCol], columns)
                 break
         var width: Table[string,int]
-        var fullWidth = df.getColumns().len
-        for colName in columns:
+        var fullWidth = columns.len
+        for colIndex, colName in columns.pairs():
             let dataWidth = max(
                 collect(newSeq) do:
-                    for i in 0..<df[colName].len:
-                        seriesSeq[colTable[colName]][i].len
+                    for i in 0..<df[colIndex].len:
+                        df[colIndex][i].len
             )
             width[colName] = max(colName.len, dataWidth) + indexColSign.ord
             fullWidth += width[colName] + 2
@@ -323,8 +322,8 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
         #
         for i in 0..<df.len:
             result &= "|"
-            for colName in columns:
-                result &= " ".repeat(width[colName]-seriesSeq[colTable[colName]][i].len+1) & seriesSeq[colTable[colName]][i] & " |"
+            for colIndex, colName in columns.pairs():
+                result &= " ".repeat(width[colName]-df[colIndex][i].len+1) & df[colIndex][i] & " |"
             result &= "\n"
         result &= "+" & "-".repeat(fullWidth-1) & "+"
 
