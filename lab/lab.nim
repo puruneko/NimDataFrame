@@ -95,11 +95,61 @@ for i in 0..<N:
     a5[i] = $sum([1,2,3,4,5])
 echo cpuTime() - tStart
 
+type ColName = string
+type ColType = enum
+    IntCol, FloatCol, StringCol, DatetimeCol
 type DataFrame[T] = object
     data: T
-    colTable: seq[string]
-var tpl: (int,float,string) = (1,2.0,"3")
+    columns: seq[ColName]
+    colIndex: Table[ColName, int]
+    colType: Table[ColName, ColType]
 
-echo tpl[0]
-echo tpl[1]
-echo tpl[2]
+macro getDataFrameData(colTypes: static[openArray[ColType]]): untyped =
+    var returnType = nnkPar.newTree()
+    for colType in colTypes:
+        let t = case colType
+            of IntCol: bindSym"int"
+            of FloatCol: bindSym"float"
+            of StringCol: bindSym"string"
+            of DatetimeCol: bindSym"DateTime"
+        returnType.add(
+            nnkBracketExpr.newTree(newIdentNode("seq"), t)
+        )
+    return returnType
+
+proc initData[T](columnsWithType: openArray[(ColName, ColType)]): T =
+    var res: getDataFrameData(columnsWithType)
+    result = res
+
+proc initDataFrame[T](columnsWithType: openArray[(ColName, ColType)]): DataFrame[T] =
+    result = DataFrame[getDataFrameData(columnsWithType)]
+    result.columns = @[]
+    result.colIndex = initTable[ColName, int]()
+    result.colType = initTable[ColName, ColType]()
+    for i, (colName, colType) in columnsWithType.pairs():
+        result.columns.add(colName)
+        result.colIndex[colName] = i
+        result.colType[colName] = colType
+
+var columns = @["col1", "col2", "col3"]
+var types: seq[ColType] = @[IntCol, FloatCol, StringCol]
+var ct =
+    collect(newSeq):
+        for (c, t) in zip(columns, types):
+            (c, t)
+#var df = initDataFrame(ct)
+
+var df: getDataFrameData(@[IntCol, FloatCol, StringCol])
+echo typeof(df)
+echo df
+
+macro inspectType(df: typed): untyped =
+    echo "--------"
+    echo df.strVal
+    echo df.getTypeImpl.repr
+    for colType in df.getTypeImpl:
+        echo colType.repr
+        for cellType in colType.getTypeImpl:
+            echo cellType.repr
+
+inspectType(df)
