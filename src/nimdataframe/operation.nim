@@ -28,6 +28,13 @@ proc fillEmpty*[T](df: DataFrame, fill: T): DataFrame =
     for colIndex, colName in result.columns.paris():
         result[colIndex] = fillEmpty(df[colIndex], fill)
 
+proc dropEmpty*(s: Series): Series =
+    result =
+        collect(newSeq):
+            for c in s:
+                if c != dfEmpty:
+                    c
+
 proc dropEmpty*(df: DataFrame): DataFrame =
     result = initDataFrame(df)
     for i in 0..<df.len:
