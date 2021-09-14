@@ -407,7 +407,7 @@ proc v*(dfg: DataFrameGroupBy): DataFrame =
     dfg.aggMath(stats.variance)
 
 ###############################################################
-proc resample*(df: DataFrame, window: int, format=defaultDateTimeFormat): DataFrameResample =
+proc resample*(df: DataFrame, window: int, format=defaultDatetimeFormat): DataFrameResample =
     ## DataFrameを指定の行数でリサンプルする（戻り値はDataFrameResample型）.
     ##
 
@@ -415,7 +415,7 @@ proc resample*(df: DataFrame, window: int, format=defaultDateTimeFormat): DataFr
     result.window = $window
     result.format = format
 
-proc resample*(df: DataFrame, window: string, format=defaultDateTimeFormat): DataFrameResample =
+proc resample*(df: DataFrame, window: string, format=defaultDatetimeFormat): DataFrameResample =
     result.data = df
     result.window = window
     result.format = format
@@ -722,7 +722,7 @@ proc v*(dfre: DataFrameResample): DataFrame =
 
 
 ###############################################################
-proc rolling*(df: DataFrame, window: int, format=defaultDateTimeFormat): DataFrameRolling =
+proc rolling*(df: DataFrame, window: int, format=defaultDatetimeFormat): DataFrameRolling =
     ## DataFrameを指定の行数でリサンプルする（戻り値はDataFrameRolling型）.
     ##
 
@@ -730,7 +730,7 @@ proc rolling*(df: DataFrame, window: int, format=defaultDateTimeFormat): DataFra
     result.window = $window
     result.format = format
 
-proc rolling*(df: DataFrame, window: string, format=defaultDateTimeFormat): DataFrameRolling =
+proc rolling*(df: DataFrame, window: string, format=defaultDatetimeFormat): DataFrameRolling =
     result.data = df
     result.window = window
     result.format = format

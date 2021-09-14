@@ -21,7 +21,7 @@ type UnimplementedError* = object of CatchableError
 const dfEmpty* = ""
 const defaultIndexName* = "_idx_"
 const mergeIndexName* = "_on_"
-const defaultDateTimeFormat* = "yyyy-MM-dd HH:mm:ss"
+const defaultDatetimeFormat* = "yyyy-MM-dd HH:mm:ss"
 
 
 ###############################################################
@@ -92,18 +92,18 @@ proc initRow*(df: DataFrame): Row =
 
 
 proc `$`*(x: DateTime): string =
-    x.format(defaultDateTimeFormat)
+    x.format(defaultDatetimeFormat)
 
 proc parseString*[T](x: T): Cell =
     when typeof(T) is DateTime:
-        result = x.format(defaultDateTimeFormat)
+        result = x.format(defaultDatetimeFormat)
     else:
         result = $(x)
 
-proc parseDatetime*(c: Cell, format=defaultDateTimeFormat): DateTime =
+proc parseDatetime*(c: Cell, format=defaultDatetimeFormat): DateTime =
     c.parse(format)
 
-proc genParseDatetime*(format=defaultDateTimeFormat): Cell -> DateTime =
+proc genParseDatetime*(format=defaultDatetimeFormat): Cell -> DateTime =
     result =
         proc(c:Cell): DateTime =
             c.parseDatetime(format)
@@ -120,7 +120,7 @@ proc toInt*(s: Series): seq[int] =
 proc toFloat*(s: Series): seq[float] =
     to(s, parseFloat)
 
-proc toDatetime*(s: Series, format=defaultDateTimeFormat): seq[DateTime] =
+proc toDatetime*(s: Series, format=defaultDatetimeFormat): seq[DateTime] =
     to(s, genParseDatetime(format))
 
 proc toString*[T](arr: openArray[T]): Series =
@@ -134,7 +134,7 @@ proc initDataFrame*(): DataFrame =
     result.columns = @[]
     result.colTable = initTable[ColName, int]()
     result.indexCol = defaultIndexName
-    result.datetimeFormat = defaultDateTimeFormat
+    result.datetimeFormat = defaultDatetimeFormat
 
 proc initDataFrame*(df: DataFrame): DataFrame =
     result = initDataFrame()

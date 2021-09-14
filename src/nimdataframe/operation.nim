@@ -108,7 +108,7 @@ proc intMap*[T](s: Series, fn: int -> T): Series =
     map(s, fn, parseInt)
 proc floatMap*[T](s: Series, fn: float -> T): Series =
     map(s, fn, parseFloat)
-proc datetimeMap*[T](s: Series, fn: DateTime -> T, format=defaultDateTimeFormat): Series =
+proc datetimeMap*[T](s: Series, fn: DateTime -> T, format=defaultDatetimeFormat): Series =
     map(s, fn, genParseDatetime(format))
 
 proc replace*(df: DataFrame, sub: string, by: string): DataFrame =
@@ -199,9 +199,9 @@ proc floatSort*(df: DataFrame, colNames: openArray[ColName], ascending=true): Da
     for colName in reversed(colNames):
         result = result.floatSort(colName, ascending)
 
-proc datetimeSort*(df: DataFrame, colName: ColName = "", format=defaultDateTimeFormat, ascending=true): DataFrame =
+proc datetimeSort*(df: DataFrame, colName: ColName = "", format=defaultDatetimeFormat, ascending=true): DataFrame =
     sort(df, colName, genParseDatetime(format), ascending)
-proc datetimeSort*(df: DataFrame, colNames: openArray[ColName], format=defaultDateTimeFormat, ascending=true): DataFrame =
+proc datetimeSort*(df: DataFrame, colNames: openArray[ColName], format=defaultDatetimeFormat, ascending=true): DataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.datetimeSort(colName, format, ascending)

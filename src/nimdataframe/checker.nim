@@ -35,7 +35,7 @@ proc isFloatSeries*(s: Series): bool =
     except:
         result = false
 
-proc isDatetimeSeries*(s: Series, format=defaultDateTimeFormat): bool =
+proc isDatetimeSeries*(s: Series, format=defaultDatetimeFormat): bool =
     result = true
     try:
         for c in s:
