@@ -282,7 +282,10 @@ proc toCsv*(df: DataFrame, writableStrem: Stream, encoding="utf-8") =
 
 proc toFigure*(df: DataFrame, indexColSign=false): string =
     result = ""
-    var columns = df.columns
+    var columns =
+        collect(newSeq):
+            for colIndex, colName in df.columns.pairs():
+                (colIndex, colName)
     #空のデータフレームの場合
     if df[df.indexCol].len == 0:
         result &= "+-------+\n"
@@ -290,14 +293,14 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
         result &= "+-------+"
     #空ではない場合
     else:
-        for i, colName in columns.pairs():
+        for i, (colIndex, colName) in columns.pairs():
             if colName == df.indexCol:
                 columns.del(i)
-                columns = concat(@[df.indexCol], columns)
+                columns = concat(@[(colIndex, colName)], columns)
                 break
         var width: Table[string,int]
         var fullWidth = columns.len
-        for colIndex, colName in columns.pairs():
+        for (colIndex, colName) in columns:
             let dataWidth = max(
                 collect(newSeq) do:
                     for i in 0..<df[colIndex].len:
@@ -305,11 +308,11 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
             )
             width[colName] = max(colName.len, dataWidth) + indexColSign.ord
             fullWidth += width[colName] + 2
-        #
+        #headerの設定
         result &= "+" & "-".repeat(fullWidth-1) & "+"
         result &= "\n"
         result &= "|"
-        for colName in columns:
+        for (colIndex, colName) in columns:
             let name =
                 if indexColSign and colName == df.indexCol:
                     colName & "*"
@@ -319,12 +322,13 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
         result &= "\n"
         result &= "|" & "-".repeat(fullWidth-1) & "|"
         result &= "\n"
-        #
+        #bodyの設定
         for i in 0..<df.len:
             result &= "|"
-            for colIndex, colName in columns.pairs():
+            for (colIndex, colName) in columns:
                 result &= " ".repeat(width[colName]-df[colIndex][i].len+1) & df[colIndex][i] & " |"
             result &= "\n"
+        #footerの設定
         result &= "+" & "-".repeat(fullWidth-1) & "+"
 
 proc show*(df: DataFrame, indexColSign=false, writableStrem: Stream = nil) =
