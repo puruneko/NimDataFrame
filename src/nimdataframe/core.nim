@@ -108,11 +108,14 @@ proc genParseDatetime*(format=defaultDatetimeFormat): Cell -> DateTime =
         proc(c:Cell): DateTime =
             c.parseDatetime(format)
 
+proc add*[T](s: var Series, item: T) =
+    s.add(y=item.parseString())
 
 proc to*[T](s: Series, parser: Cell -> T): seq[T] =
-    result = collect(newSeq):
-        for c in s:
-            parser(c)
+    result =
+        collect(newSeq):
+            for c in s:
+                parser(c)
 
 proc toInt*(s: Series): seq[int] =
     to(s, parseInt)
@@ -126,7 +129,7 @@ proc toDatetime*(s: Series, format=defaultDatetimeFormat): seq[DateTime] =
 proc toString*[T](arr: openArray[T]): Series =
     result = initSeries()
     for a in arr:
-        result.add(a.parseString())
+        result.add(a)
 
 
 proc initDataFrame*(): DataFrame =
@@ -136,12 +139,14 @@ proc initDataFrame*(): DataFrame =
     result.indexCol = defaultIndexName
     result.datetimeFormat = defaultDatetimeFormat
 
-proc initDataFrame*(df: DataFrame): DataFrame =
+proc initDataFrame*(df: DataFrame, copy=false): DataFrame =
     result = initDataFrame()
     result.indexCol = df.indexCol
     result.datetimeFormat = df.datetimeFormat
     for colName in df.columns:
         result.addColumn(colName)
+        if copy:
+            result[colName] = df[colName]
 
 proc initDataFrameGroupBy*(df: DataFrame): DataFrameGroupBy =
     result.df = df
@@ -174,7 +179,7 @@ proc addRow*(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
                 #autoIndexフラグあり
                 else:
                     if colName == df.indexCol:
-                        df[colName].add($(df.len))
+                        df[colName].add(df.len)
                     else:
                         df[colName].add(row[colName])
             #fillEmptyフラグあり
@@ -188,7 +193,7 @@ proc addRow*(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
                 #autoIndexフラグあり
                 else:
                     if colName == df.indexCol:
-                        df[colName].add($(df.len))
+                        df[colName].add(df.len)
                     else:
                         if columnsHash.contains(colName):
                             df[colName].add(row[colName])
@@ -248,7 +253,7 @@ proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInd
                         #autoIndexフラグあり、かつ、colNameがindexCol
                         if autoIndex and colName == df.indexCol:
                             for i in 0..<length:
-                                df[colName].add($(dfLen+i))
+                                df[colName].add(dfLen+i)
                         else:
                             #列名がない場合
                             if not columnsHash.contains(colName):
@@ -257,7 +262,7 @@ proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInd
                             #列名がある場合
                             else:
                                 for c in itemTable[colName]:
-                                    df[colName].add(c.parseString())
+                                    df[colName].add(c)
                                 for i in itemTable[colName].len..<length:
                                     df[colName].add(dfEmpty)
                     #fillEmptyRowフラグ無し
@@ -265,7 +270,7 @@ proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInd
                         #autoIndexフラグあり、かつ、colNameがindexCol
                         if autoIndex and colName == df.indexCol:
                             for i in 0..<length:
-                                df[colName].add($(dfLen+i))
+                                df[colName].add(dfLen+i)
                         else:
                             #列名がない場合
                             if not columnsHash.contains(colName):
@@ -274,7 +279,7 @@ proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInd
                             #列名がある場合
                             else:
                                 for c in itemTable[colName]:
-                                    df[colName].add(c.parseString())
+                                    df[colName].add(c)
                 #fillEmptyColフラグ無し
                 else:
                     #fillEmptyRowフラグあり
@@ -282,10 +287,10 @@ proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInd
                         #autoIndexフラグあり、かつ、colNameがindexCol
                         if autoIndex and colName == df.indexCol:
                             for i in 0..<length:
-                                df[colName].add($(dfLen+i))
+                                df[colName].add(dfLen+i)
                         else:
                             for c in itemTable[colName]:
-                                df[colName].add(c.parseString())
+                                df[colName].add(c)
                             for i in itemTable[colName].len..<length:
                                 df[colName].add(dfEmpty)
                     #fillEmptyRowフラグ無し
@@ -293,10 +298,10 @@ proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoInd
                         #autoIndexフラグあり、かつ、colNameがindexCol
                         if autoIndex and colName == df.indexCol:
                             for i in 0..<length:
-                                df[colName].add($(dfLen+i))
+                                df[colName].add(dfLen+i)
                         else:
                             for c in itemTable[colName]:
-                                df[colName].add(c.parseString())
+                                df[colName].add(c)
         else:
             raise newException(NimDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
     else:
@@ -319,13 +324,13 @@ proc addColumns*[T](df: var DataFrame, columns: openArray[(ColName, seq[T])], fi
             for colName in columnTable.keys:
                 for i in 0..<dfLen:
                     if i < colLength:
-                        df[colName].add(columnTable[colName][i].parseString())
+                        df[colName].add(columnTable[colName][i])
                     else:
                         df[colName].add(dfEmpty)
         else:
             for colName in columnTable.keys:
                 for i in 0..<dfLen:
-                    df[colName].add(columnTable[colName][i].parseString())
+                    df[colName].add(columnTable[colName][i])
     else:
         if lengthHash.len != 1:
             raise newException(NimDataFrameError, "argument 'columns' must be same length")

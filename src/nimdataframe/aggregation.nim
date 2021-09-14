@@ -266,7 +266,7 @@ proc agg*[T](dfg: DataFrameGroupBy, aggFn: openArray[(ColName,Series -> T)]): Da
             var s = initSeries()
             for j in dfg.group[miIndex]:
                 s.add(dfg.df[colName][j])
-            result[colName].add(fn(s).parseString())
+            result[colName].add(fn(s))
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
             if not result.columns.contains(colName):
@@ -334,7 +334,7 @@ proc apply*[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): D
         for (colName, c) in applyTable.pairs():
             if not result.columns.contains(colName):
                 result.addColumn(colName)
-            result[colName].add(c.parseString())
+            result[colName].add(c)
         #マルチインデックス値の上書き
         for (colName, colValue) in zip(dfg.columns, mi):
             if not result.columns.contains(colName):
@@ -561,7 +561,7 @@ proc agg*[T](dfre: DataFrameResample, fn: openArray[(ColName, Series -> T)]): Da
         for (colName, f) in fn:
             #result.data[colName].add(f(seriesSeq[colIndices[k]][slice]).parseString())
             #temporarySeries[k][index] = f(seriesSeq[colIndices[k]][slice]).parseString()
-            result[colName].add(f(dfre.data[colName][slice]).parseString())
+            result[colName].add(f(dfre.data[colName][slice]))
 
 proc agg*[T](dfre: DataFrameResample, fn: Series -> T): DataFrame =
     ## リサンプルされたDataFrameの各グループの全列に対して関数fnを適用する
@@ -573,7 +573,7 @@ proc agg*[T](dfre: DataFrameResample, fn: Series -> T): DataFrame =
         for colIndex, colName in dfre.data.columns.pairs():
             #result.data[colName].add(fn(seriesSeq[colIndex][slice]).parseString())
             #temporarySeries[colIndex][index] = fn(seriesSeq[colIndex][slice]).parseString()
-            result[colIndex].add(fn(dfre.data[colIndex][slice]).parseString())
+            result[colIndex].add(fn(dfre.data[colIndex][slice]))
 
 proc apply*[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): DataFrame =
     ## リサンプルされたDataFrameの各グループのDataFrameに対して関数fnを適用する
@@ -603,7 +603,7 @@ proc apply*[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): Data
         for (colName, c) in applyTable.pairs():
             if not result.columns.contains(colName):
                 result.addColumn(colName)
-            result[colName].add(c.parseString())
+            result[colName].add(c)
 
 proc aggMath*(dfre: DataFrameResample, fn: openArray[float] -> float): DataFrame =
     let tStart = cpuTime()
@@ -638,7 +638,7 @@ proc aggMath*(dfre: DataFrameResample, fn: openArray[float] -> float): DataFrame
                     slice.b = dataLen-1
                 for colIndex, colName in dfre.data.columns.pairs():
                     if validColumns.contains(colIndex):
-                        result[colIndex].add(fn(fSeriesSeq[colIndex][slice]).parseString())
+                        result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                     else:
                         result[colIndex].add(dfEmpty)
                 indexSeries.add(dfre.data[dfre.data.indexCol][i])
@@ -671,7 +671,7 @@ proc aggMath*(dfre: DataFrameResample, fn: openArray[float] -> float): DataFrame
                             slice.b = dataLen-1
                         for colIndex, colName in dfre.data.columns.pairs():
                             if validColumns.contains(colIndex):
-                                result[colIndex].add(fn(fSeriesSeq[colIndex][slice]).parseString())
+                                result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                             else:
                                 result[colIndex].add(dfEmpty)
                         indexSeries.add(nowLimit - interval)
@@ -683,7 +683,7 @@ proc aggMath*(dfre: DataFrameResample, fn: openArray[float] -> float): DataFrame
                     var slice = startIndex..<dataLen
                     for colIndex, colName in dfre.data.columns.pairs():
                         if validColumns.contains(colIndex):
-                            result[colIndex].add(fn(fSeriesSeq[colIndex][slice]).parseString())
+                            result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                         else:
                             result[colIndex].add(dfEmpty)
                     indexSeries.add(nowLimit - interval)
@@ -855,7 +855,7 @@ proc agg*[T](dfro: DataFrameRolling, fn: openArray[(ColName, Series -> T)]): Dat
     rollingAggTemplate:
         for (colName, f) in fn:
             #result.data[colName].add(f(seriesSeq[colTable[colName]][slice]).parseString())
-            result[colName].add(f(dfro.data[colName][slice]).parseString())
+            result[colName].add(f(dfro.data[colName][slice]))
 
 proc agg*[T](dfro: DataFrameRolling, fn: Series -> T): DataFrame =
     ## rollingされたDataFrameの各グループの全列に対して関数fnを適用する
@@ -866,7 +866,7 @@ proc agg*[T](dfro: DataFrameRolling, fn: Series -> T): DataFrame =
     rollingAggTemplate:
         for colIndex, colName in dfro.data.columns.pairs():
             #result.data[colName].add(fn(seriesSeq[colIndex][slice]).parseString())
-            result[colName].add(fn(dfro.data[colIndex][slice]).parseString())
+            result[colName].add(fn(dfro.data[colIndex][slice]))
 
 proc apply*[T](dfro: DataFrameRolling, fn: DataFrame -> Table[ColName,T]): DataFrame =
     ## rollingされたDataFrameの各グループのDataFrameに対して関数fnを適用する
@@ -894,7 +894,7 @@ proc apply*[T](dfro: DataFrameRolling, fn: DataFrame -> Table[ColName,T]): DataF
         #applyFn適用
         var applyTable = fn(dfTemp)
         for (colName, c) in applyTable.pairs():
-            result[colName].add(c.parseString())
+            result[colName].add(c)
 
 proc aggMath*(dfro: DataFrameRolling, fn: openArray[float] -> float): DataFrame =
     result = initDataFrame()
@@ -930,7 +930,7 @@ proc aggMath*(dfro: DataFrameRolling, fn: openArray[float] -> float): DataFrame 
                     slice.b = dataLen-1
                 for colIndex, colName in dfro.data.columns.pairs():
                     if validColumns.contains(colIndex):
-                        result[colIndex].add(fn(fSeriesSeq[colIndex][slice]).parseString())
+                        result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                     else:
                         result[colIndex].add(dfEmpty)
                 index.add(dfro.data[dfro.data.indexCol][i])
@@ -959,7 +959,7 @@ proc aggMath*(dfro: DataFrameRolling, fn: openArray[float] -> float): DataFrame 
                             underIndex = j
                     for colIndex, colName in dfro.data.columns.pairs():
                         if validColumns.contains(colIndex):
-                            result[colIndex].add(fn(fSeriesSeq[colIndex][slice]).parseString())
+                            result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                         else:
                             result[colIndex].add(dfEmpty)
                     index.add(dt)

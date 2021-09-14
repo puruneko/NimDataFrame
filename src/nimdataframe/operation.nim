@@ -99,7 +99,7 @@ proc map*[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
 
     result = initSeries()
     for c in s:
-        result.add(fn(fromCell(c)).parseString())
+        result.add(fn(fromCell(c)))
 
 proc map*[T](s: Series, fn: string -> T): Series =
     let f = proc(c: Cell): string = c
