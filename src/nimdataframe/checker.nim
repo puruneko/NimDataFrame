@@ -19,6 +19,9 @@ proc healthCheck*(df: DataFrame, raiseException=false): bool{.discardable.} =
             return false
     return true
 
+proc isEmpty*(c: Cell): bool =
+    c == dfEmpty
+
 proc isIntSeries*(s: Series): bool =
     result = true
     try:
