@@ -153,3 +153,6 @@ macro inspectType(df: typed): untyped =
             echo cellType.repr
 
 inspectType(df)
+
+for i in 10..10:
+    echo i

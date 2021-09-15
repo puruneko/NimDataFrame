@@ -57,7 +57,7 @@ proc toBe*() =
     timeAttack("df (1)"):
         var df = toDataFrame(
             text=csv,
-            headers=["time","name","sales","日本語","dummy"],
+            headers=["time","name","sales","日本語","dummy","dummy2"],
             headerRows=1,
         )
         df.show(true)
@@ -66,6 +66,7 @@ proc toBe*() =
         df = toDataFrame(
             text=csv,
             headerLineNumber=1,
+            duplicatedHeader=true
         )
         df.show(true)
     #

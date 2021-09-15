@@ -110,6 +110,7 @@ proc toDataFrame*(
     text: string,
     sep=',',
     headerLineNumber=1,
+    duplicatedHeader=false,
     indexCol="",
     encoding="utf-8"
 ): StringDataFrame =
@@ -132,6 +133,27 @@ proc toDataFrame*(
     var headers: seq[string]
     for i in 0..<headerLineNumber:
         headers = rowItr()
+    if not duplicatedHeader and (headers.len != toHashSet(headers).len):
+        let dup =
+            collect(newSeq):
+                for i in 0..<headers.len-1:
+                    for j in i+1..<headers.len:
+                        if headers[i] == headers[j]:
+                            headers[i]
+        raise newException(StringDataFrameError, fmt"duplicate header with {dup}")
+    if duplicatedHeader and (headers.len != toHashSet(headers).len):
+        let dup =
+            collect(newSeq):
+                for i in 0..<headers.len-1:
+                    for j in i+1..<headers.len:
+                        if headers[i] == headers[j]:
+                            headers[i]
+        for d in dup:
+            var counter = 0
+            for i in 0..<headers.len:
+                if headers[i] == d:
+                    headers[i] = fmt"{headers[i]}_{counter}"
+                    counter.inc()
     for colName in headers:
         result.addColumn(colName)
     #テキストデータの変換
