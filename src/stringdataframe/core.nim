@@ -515,11 +515,11 @@ proc keepColumns*(df: StringDataFrame, colNames: openArray[ColName], forceDropIn
         dropCols.add(df.indexCol)
     result = df.dropColumns(dropCols, forceDropIndex)
 
-proc keepColumns*(df: StringDataFrame, colName: ColName, forceDropIndex=false): StringDataFrame =
+proc keepColumn*(df: StringDataFrame, colName: ColName, forceDropIndex=false): StringDataFrame =
     df.keepColumns([colName], forceDropIndex)
 
 proc surviveColumns*(df: var StringDataFrame, colNames: openArray[ColName], forceDropIndex=false) =
     df = df.keepColumns(colNames, forceDropIndex)
 
-proc surviveColumns*(df: var StringDataFrame, colName: ColName, forceDropIndex=false) =
+proc surviveColumn*(df: var StringDataFrame, colName: ColName, forceDropIndex=false) =
     df = df.keepColumns([colName], forceDropIndex)
