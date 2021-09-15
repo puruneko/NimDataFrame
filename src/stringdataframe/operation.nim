@@ -61,10 +61,11 @@ proc renameColumns*(df: StringDataFrame, renameMap: openArray[(ColName,ColName)]
     for renamePair in renameMap:
         if result.columns.contains(renamePair[0]):
             result[renamePair[1]] = result[renamePair[0]]
-            result.deleteColumn(renamePair[0])
             #インデックス列が書き換えられたときはインデックス情報を更新する
             if renamePair[0] == df.indexCol:
                 result.indexCol = renamePair[1]
+            #古い情報を削除する
+            result.deleteColumn(renamePair[0])
 
 
 proc resetIndex*[T](df: StringDataFrame, fn: int -> T): StringDataFrame =

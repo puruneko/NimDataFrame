@@ -471,13 +471,16 @@ proc appendColumns*[T](df: StringDataFrame, columns: openArray[(ColName, seq[T])
 proc addColumns*[T](df: var StringDataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false, override=false) =
     df = df.appendColumns(columns, fillEmpty, override)
 
-proc dropColumns*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFrame =
+proc dropColumns*(df: StringDataFrame, colNames: openArray[ColName], forceDropIndex=false): StringDataFrame =
     ## 指定のDataFrameの列を削除する.
+    ## index列は削除できない（エラー）
     runnableExamples:
         df.dropColumns(["col1","col2"])
     ##
 
     result = df
+    if not forceDropIndex and colNames.contains(df.indexCol):
+        raise newException(StringDataFrameError, fmt"can not drop index column({df.indexCol})")
     for colName in colNames:
         let itr = result.colTable[colName]
         result.data.delete(itr)
@@ -486,26 +489,37 @@ proc dropColumns*(df: StringDataFrame, colNames: openArray[ColName]): StringData
         for cn in result.columns[itr..high(result.columns)]:
             result.colTable[cn] -= 1
 
-proc dropColumns*(df: StringDataFrame, colName: ColName): StringDataFrame =
-    df.dropColumns([colName])
+proc dropColumns*(df: StringDataFrame, colName: ColName, forceDropIndex=false): StringDataFrame =
+    df.dropColumns([colName], forceDropIndex)
 
-proc deleteColumns*(df: var StringDataFrame, colNames: openArray[ColName]) =
+proc deleteColumns*(df: var StringDataFrame, colNames: openArray[ColName], forceDropIndex=false) =
     ## 指定のDataFrameの列を削除する.
     runnableExamples:
         df.deleteColumns(["col1","col2"])
     ##
 
-    df = df.dropColumns(colNames)
+    df = df.dropColumns(colNames, forceDropIndex)
 
-proc deleteColumn*(df: var StringDataFrame, colName: ColName) =
-    df.deleteColumns([colName])
+proc deleteColumn*(df: var StringDataFrame, colName: ColName, forceDropIndex=false) =
+    df.deleteColumns([colName], forceDropIndex)
 
-proc keepColumns*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFrame =
+proc keepColumns*(df: StringDataFrame, colNames: openArray[ColName], forceDropIndex=false): StringDataFrame =
+    ## 指定列以外削除する
+    ## インデックス列が指定されていない場合、自動で追加される
+    ## 
     var dropCols: seq[ColName] = @[]
     for colName in df.columns:
         if not colNames.contains(colName):
             dropCols.add(colName)
-    result = df.dropColumns(dropCols)
+    if not forceDropIndex and not dropCols.contains(df.indexCol):
+        dropCols.add(df.indexCol)
+    result = df.dropColumns(dropCols, forceDropIndex)
 
-proc surviveColumns*(df: var StringDataFrame, colNames: openArray[ColName]) =
-    df = df.keepColumns(colNames)
+proc keepColumns*(df: StringDataFrame, colName: ColName, forceDropIndex=false): StringDataFrame =
+    df.keepColumns([colName], forceDropIndex)
+
+proc surviveColumns*(df: var StringDataFrame, colNames: openArray[ColName], forceDropIndex=false) =
+    df = df.keepColumns(colNames, forceDropIndex)
+
+proc surviveColumns*(df: var StringDataFrame, colName: ColName, forceDropIndex=false) =
+    df = df.keepColumns([colName], forceDropIndex)
