@@ -19,7 +19,7 @@ import checker
 ###############################################################
 proc concat*(dfs: openArray[StringDataFrame]): StringDataFrame =
     ## 単純に下にDataFrameを連結し続ける.
-    ## インデックスは最後に指定したDataFrameのインデックスとなる.
+    ## インデックスは最初に指定したDataFrameのインデックスとなる.
     runnableExamples:
         concat([df1, df2, df3])
     ##
@@ -43,7 +43,7 @@ proc concat*(dfs: openArray[StringDataFrame]): StringDataFrame =
             else:
                 for i in 0..<df.len:
                     result[colName].add(dfEmpty)
-    result.indexCol = dfs[^1].indexCol
+    result.indexCol = dfs[0].indexCol
     result.healthCheck(raiseException=true)
 
 proc indexOf[T](s: openArray[T], key: T): int =

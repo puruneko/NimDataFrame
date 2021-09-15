@@ -499,3 +499,13 @@ proc deleteColumns*(df: var StringDataFrame, colNames: openArray[ColName]) =
 
 proc deleteColumn*(df: var StringDataFrame, colName: ColName) =
     df.deleteColumns([colName])
+
+proc keepColumns*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFrame =
+    var dropCols: seq[ColName] = @[]
+    for colName in df.columns:
+        if not colNames.contains(colName):
+            dropCols.add(colName)
+    result = df.dropColumns(dropCols)
+
+proc surviveColumns*(df: var StringDataFrame, colNames: openArray[ColName]) =
+    df = df.keepColumns(colNames)
