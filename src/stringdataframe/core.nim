@@ -510,9 +510,8 @@ proc keepColumns*(df: StringDataFrame, colNames: openArray[ColName], forceDropIn
     var dropCols: seq[ColName] = @[]
     for colName in df.columns:
         if not colNames.contains(colName):
-            dropCols.add(colName)
-    if not forceDropIndex and not dropCols.contains(df.indexCol):
-        dropCols.add(df.indexCol)
+            if forceDropIndex or (not forceDropIndex and colName != df.indexCol):
+                dropCols.add(colName)
     result = df.dropColumns(dropCols, forceDropIndex)
 
 proc keepColumn*(df: StringDataFrame, colName: ColName, forceDropIndex=false): StringDataFrame =
