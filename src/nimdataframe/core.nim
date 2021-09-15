@@ -161,184 +161,6 @@ proc len*(df: DataFrame): int =
     ## no healthCheck
     result = df[df.indexCol].len
 
-proc addRow*(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
-    var columns: seq[ColName] = @[]
-    for colName in row.keys:
-        columns.add(colName)
-    let columnsHash = toHashSet(columns)
-    let dfColumnsHash = toHashSet(df.columns)
-    if dfColumnsHash == columnsHash or
-        fillEmpty or
-        (autoIndex and dfColumnsHash - toHashSet([df.indexCol]) == columnsHash):
-        for colName in dfColumnsHash:
-            #fillEmptyフラグ無し
-            if not fillEmpty:
-                #autoIndexフラグ無し
-                if not autoIndex:
-                    df[colName].add(row[colName])
-                #autoIndexフラグあり
-                else:
-                    if colName == df.indexCol:
-                        df[colName].add(df.len)
-                    else:
-                        df[colName].add(row[colName])
-            #fillEmptyフラグあり
-            else:
-                #autoIndexフラグ無し
-                if not autoIndex:
-                    if columnsHash.contains(colName):
-                        df[colName].add(row[colName])
-                    else:
-                        df[colName].add(dfEmpty)
-                #autoIndexフラグあり
-                else:
-                    if colName == df.indexCol:
-                        df[colName].add(df.len)
-                    else:
-                        if columnsHash.contains(colName):
-                            df[colName].add(row[colName])
-                        else:
-                            df[colName].add(dfEmpty)
-    else:
-        raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
-
-proc addRow*[T](df: var DataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false) =
-    var newRow: Row
-    for (colName, value) in row:
-        newRow[colName] = value.parseString()
-    df.addRow(newRow, autoIndex, fillEmpty)
-
-proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false) =
-    ##
-    runnableExamples:
-        var df = toDataFrame(
-            columns = {
-                "a": @[1,2,3,4],
-                "b": @[10,20,30,40],
-                "c": @[100,200,300,400],
-            },
-            indexCol = "a",
-        )
-        df.addRow(
-            items = {
-                "b": @[50,60],
-                "c": @[500]
-            },
-            autoIndex=true,
-            fillEmptyRow=true,
-            fillEmptyCol=true,
-        )
-    ##
-
-    let itemTable = items.toTable()
-    var columns: seq[ColName] = @[]
-    var lengths: seq[int] = @[]
-    for (colName, s) in itemTable.pairs():
-        columns.add(colName)
-        lengths.add(s.len)
-    let columnsHash = toHashSet(columns)
-    let dfColumnsHash = toHashSet(df.columns)
-    let lengthsHash = toHashSet(lengths)
-    let length = max(toHashSet(lengths).toSeq())
-    let dfLen = df.len
-    if dfColumnsHash == columnsHash or
-        fillEmptyCol or
-        (autoIndex and dfColumnsHash - toHashSet([df.indexCol]) == columnsHash):
-        if lengthsHash.len == 1 or fillEmptyRow:
-            for colName in dfColumnsHash:
-                #fillEmptyColフラグあり
-                if fillEmptyCol:
-                    #fillEmptyRowフラグあり
-                    if fillEmptyRow:
-                        #autoIndexフラグあり、かつ、colNameがindexCol
-                        if autoIndex and colName == df.indexCol:
-                            for i in 0..<length:
-                                df[colName].add(dfLen+i)
-                        else:
-                            #列名がない場合
-                            if not columnsHash.contains(colName):
-                                for i in 0..<length:
-                                    df[colName].add(dfEmpty)
-                            #列名がある場合
-                            else:
-                                for c in itemTable[colName]:
-                                    df[colName].add(c)
-                                for i in itemTable[colName].len..<length:
-                                    df[colName].add(dfEmpty)
-                    #fillEmptyRowフラグ無し
-                    else:
-                        #autoIndexフラグあり、かつ、colNameがindexCol
-                        if autoIndex and colName == df.indexCol:
-                            for i in 0..<length:
-                                df[colName].add(dfLen+i)
-                        else:
-                            #列名がない場合
-                            if not columnsHash.contains(colName):
-                                for i in 0..<length:
-                                    df[colName].add(dfEmpty)
-                            #列名がある場合
-                            else:
-                                for c in itemTable[colName]:
-                                    df[colName].add(c)
-                #fillEmptyColフラグ無し
-                else:
-                    #fillEmptyRowフラグあり
-                    if fillEmptyRow:
-                        #autoIndexフラグあり、かつ、colNameがindexCol
-                        if autoIndex and colName == df.indexCol:
-                            for i in 0..<length:
-                                df[colName].add(dfLen+i)
-                        else:
-                            for c in itemTable[colName]:
-                                df[colName].add(c)
-                            for i in itemTable[colName].len..<length:
-                                df[colName].add(dfEmpty)
-                    #fillEmptyRowフラグ無し
-                    else:
-                        #autoIndexフラグあり、かつ、colNameがindexCol
-                        if autoIndex and colName == df.indexCol:
-                            for i in 0..<length:
-                                df[colName].add(dfLen+i)
-                        else:
-                            for c in itemTable[colName]:
-                                df[colName].add(c)
-        else:
-            raise newException(NimDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
-    else:
-        raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
-
-proc addColumns*[T](df: var DataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false) =
-    let columnTable = columns.toTable()
-    var lengths: seq[int] = @[]
-    for (colName, s) in columnTable.pairs():
-        lengths.add(s.len)
-    let lengthHash = toHashSet(lengths)
-    let colLength = lengthHash.toSeq()[0]
-    let dfLen = df.len
-    #すべての長さが一致していた場合
-    if lengthHash.len == 1 and
-        ((fillEmpty and colLength <= dfLen) or (not fillEmpty and colLength == dfLen)):
-        for colName in columnTable.keys:
-            df.addColumn(colName)
-        if fillEmpty:
-            for colName in columnTable.keys:
-                for i in 0..<dfLen:
-                    if i < colLength:
-                        df[colName].add(columnTable[colName][i])
-                    else:
-                        df[colName].add(dfEmpty)
-        else:
-            for colName in columnTable.keys:
-                for i in 0..<dfLen:
-                    df[colName].add(columnTable[colName][i])
-    else:
-        if lengthHash.len != 1:
-            raise newException(NimDataFrameError, "argument 'columns' must be same length")
-        elif fillEmpty:
-            raise newException(NimDataFrameError, "each 'columns' must be shorter than length of DataFrame")
-        else:
-            raise newException(NimDataFrameError, "length of 'columns' must be the same as length of DataFrame")
-
 proc deepCopy*(df: DataFrame): DataFrame =
     result = initDataFrame(df)
     for i in 0..<df.len:
@@ -434,22 +256,220 @@ proc size*(df: DataFrame, excludeIndex=false): int =
             df.columns.len
     )
 
-proc deleteColumns*(df: var DataFrame, colNames: openArray[ColName]) =
-    ## 指定のDataFrameの列を削除する.
+
+proc appendRow*(df: DataFrame, row: Row, autoIndex=false, fillEmpty=false): DataFrame =
+    result = df
+    var columns: seq[ColName] = @[]
+    for colName in row.keys:
+        columns.add(colName)
+    let columnsHash = toHashSet(columns)
+    let dfColumnsHash = toHashSet(df.columns)
+    if dfColumnsHash == columnsHash or
+        fillEmpty or
+        (autoIndex and dfColumnsHash - toHashSet([df.indexCol]) == columnsHash):
+        for colName in dfColumnsHash:
+            #fillEmptyフラグ無し
+            if not fillEmpty:
+                #autoIndexフラグ無し
+                if not autoIndex:
+                    result[colName].add(row[colName])
+                #autoIndexフラグあり
+                else:
+                    if colName == df.indexCol:
+                        result[colName].add(df.len)
+                    else:
+                        result[colName].add(row[colName])
+            #fillEmptyフラグあり
+            else:
+                #autoIndexフラグ無し
+                if not autoIndex:
+                    if columnsHash.contains(colName):
+                        result[colName].add(row[colName])
+                    else:
+                        result[colName].add(dfEmpty)
+                #autoIndexフラグあり
+                else:
+                    if colName == df.indexCol:
+                        result[colName].add(df.len)
+                    else:
+                        if columnsHash.contains(colName):
+                            result[colName].add(row[colName])
+                        else:
+                            result[colName].add(dfEmpty)
+    else:
+        raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
+
+proc appendRow*[T](df: DataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false): DataFrame =
+    var newRow: Row
+    for (colName, value) in row:
+        newRow[colName] = value.parseString()
+    result = df.appendRow(newRow, autoIndex, fillEmpty)
+
+proc addRow*(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
+    df = df.appendRow(row, autoIndex, fillEmpty)
+
+proc addRow*[T](df: var DataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false) =
+    df = df.appendRow(row, autoIndex, fillEmpty)
+
+proc appendRows*[T](df: DataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false): DataFrame =
+    ##
     runnableExamples:
-        df.deleteColumns(["col1","col2"])
+        var df = toDataFrame(
+            columns = {
+                "a": @[1,2,3,4],
+                "b": @[10,20,30,40],
+                "c": @[100,200,300,400],
+            },
+            indexCol = "a",
+        )
+        df = df.appendRow(
+            items = {
+                "b": @[50,60],
+                "c": @[500]
+            },
+            autoIndex=true,
+            fillEmptyRow=true,
+            fillEmptyCol=true,
+        )
     ##
 
-    for colName in colNames:
-        let itr = df.colTable[colName]
-        df.data.delete(itr)
-        df.columns.delete(itr)
-        df.colTable.del(colName)
-        for cn in df.columns[itr..high(df.columns)]:
-            df.colTable[cn] -= 1
+    result = df
+    let itemTable = items.toTable()
+    var columns: seq[ColName] = @[]
+    var lengths: seq[int] = @[]
+    for (colName, s) in itemTable.pairs():
+        columns.add(colName)
+        lengths.add(s.len)
+    let columnsHash = toHashSet(columns)
+    let dfColumnsHash = toHashSet(df.columns)
+    let lengthsHash = toHashSet(lengths)
+    let length = max(toHashSet(lengths).toSeq())
+    let dfLen = df.len
+    if dfColumnsHash == columnsHash or
+        fillEmptyCol or
+        (autoIndex and dfColumnsHash - toHashSet([df.indexCol]) == columnsHash):
+        if lengthsHash.len == 1 or fillEmptyRow:
+            for colName in dfColumnsHash:
+                #fillEmptyColフラグあり
+                if fillEmptyCol:
+                    #fillEmptyRowフラグあり
+                    if fillEmptyRow:
+                        #autoIndexフラグあり、かつ、colNameがindexCol
+                        if autoIndex and colName == df.indexCol:
+                            for i in 0..<length:
+                                result[colName].add(dfLen+i)
+                        else:
+                            #列名がない場合
+                            if not columnsHash.contains(colName):
+                                for i in 0..<length:
+                                    result[colName].add(dfEmpty)
+                            #列名がある場合
+                            else:
+                                for c in itemTable[colName]:
+                                    result[colName].add(c)
+                                for i in itemTable[colName].len..<length:
+                                    result[colName].add(dfEmpty)
+                    #fillEmptyRowフラグ無し
+                    else:
+                        #autoIndexフラグあり、かつ、colNameがindexCol
+                        if autoIndex and colName == df.indexCol:
+                            for i in 0..<length:
+                                result[colName].add(dfLen+i)
+                        else:
+                            #列名がない場合
+                            if not columnsHash.contains(colName):
+                                for i in 0..<length:
+                                    result[colName].add(dfEmpty)
+                            #列名がある場合
+                            else:
+                                for c in itemTable[colName]:
+                                    result[colName].add(c)
+                #fillEmptyColフラグ無し
+                else:
+                    #fillEmptyRowフラグあり
+                    if fillEmptyRow:
+                        #autoIndexフラグあり、かつ、colNameがindexCol
+                        if autoIndex and colName == df.indexCol:
+                            for i in 0..<length:
+                                result[colName].add(dfLen+i)
+                        else:
+                            for c in itemTable[colName]:
+                                result[colName].add(c)
+                            for i in itemTable[colName].len..<length:
+                                result[colName].add(dfEmpty)
+                    #fillEmptyRowフラグ無し
+                    else:
+                        #autoIndexフラグあり、かつ、colNameがindexCol
+                        if autoIndex and colName == df.indexCol:
+                            for i in 0..<length:
+                                result[colName].add(dfLen+i)
+                        else:
+                            for c in itemTable[colName]:
+                                result[colName].add(c)
+        else:
+            raise newException(NimDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
+    else:
+        raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
 
-proc deleteColumn*(df: var DataFrame, colName: ColName) =
-    df.deleteColumns([colName])
+proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false) =
+    df = df.appendRows(items, autoIndex, fillEmptyRow, fillEmptyCol)
+
+#TODO: overrideオプションつける
+proc appendColumns*[T](df: DataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false, override=false): DataFrame =
+    result = df
+    let columnTable = columns.toTable()
+    var lengths: seq[int] = @[]
+    var appendedColumns: seq[ColName] = @[]
+    for (colName, s) in columnTable.pairs():
+        lengths.add(s.len)
+        appendedColumns.add(colName)
+    let intersectionColumns = toHashSet(df.columns).intersection(toHashSet(appendedColumns))
+    let lengthHash = toHashSet(lengths)
+    let colLength = max(lengths)
+    let dfLen = df.len
+    echo dfLen, lengthHash, colLength, intersectionColumns
+    #すべての長さが一致していた場合、またはfillEmptyオプションがついている場合
+    if ((fillEmpty and colLength <= dfLen) or (not fillEmpty and lengthHash.len == 1 and colLength == dfLen)) and
+        (override or (not override and intersectionColumns.len == 0)):
+        for colName in columnTable.keys:
+            if intersectionColumns.contains(colName):
+                continue
+            result.addColumn(colName)
+        if fillEmpty:
+            for colName in columnTable.keys:
+                let colLen = columnTable[colName].len
+                let isIntersection = intersectionColumns.contains(colName)
+                for i in 0..<dfLen:
+                    if i < colLen:
+                        if isIntersection:
+                            result[colName][i] = columnTable[colName][i].parseString()
+                        else:
+                            result[colName].add(columnTable[colName][i])
+                    else:
+                        if isIntersection:
+                            result[colName][i] = dfEmpty
+                        else:
+                            result[colName].add(dfEmpty)
+        else:
+            for colName in columnTable.keys:
+                let isIntersection = intersectionColumns.contains(colName)
+                for i in 0..<dfLen:
+                    if isIntersection:
+                        result[colName][i] = columnTable[colName][i].parseString()
+                    else:
+                        result[colName].add(columnTable[colName][i])
+    else:
+        if lengthHash.len != 1:
+            raise newException(NimDataFrameError, fmt"argument 'columns'({lengthHash}) must be same length({dfLen})")
+        elif fillEmpty and colLength > dfLen:
+            raise newException(NimDataFrameError, fmt"each argument 'columns'({lengthHash}) must be shorter than length of DataFrame({dfLen})")
+        elif not fillEmpty and (lengthHash.len != 1 or colLength != dfLen):
+            raise newException(NimDataFrameError, fmt"length of argument 'columns'({lengthHash}) must be the same as length of DataFrame({dfLen})")
+        else:#override
+            raise newException(NimDataFrameError, fmt"if override option is not set, argument 'columns' can not specify columns of dataframe({intersectionColumns})")
+
+proc addColumns*[T](df: var DataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false, override=false) =
+    df = df.appendColumns(columns, fillEmpty, override)
 
 proc dropColumns*(df: DataFrame, colNames: openArray[ColName]): DataFrame =
     ## 指定のDataFrameの列を削除する.
@@ -465,3 +485,17 @@ proc dropColumns*(df: DataFrame, colNames: openArray[ColName]): DataFrame =
         result.colTable.del(colName)
         for cn in result.columns[itr..high(result.columns)]:
             result.colTable[cn] -= 1
+
+proc dropColumns*(df: DataFrame, colName: ColName): DataFrame =
+    df.dropColumns([colName])
+
+proc deleteColumns*(df: var DataFrame, colNames: openArray[ColName]) =
+    ## 指定のDataFrameの列を削除する.
+    runnableExamples:
+        df.deleteColumns(["col1","col2"])
+    ##
+
+    df = df.dropColumns(colNames)
+
+proc deleteColumn*(df: var DataFrame, colName: ColName) =
+    df.deleteColumns([colName])

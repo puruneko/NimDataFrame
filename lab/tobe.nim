@@ -260,7 +260,6 @@ proc toBe*() =
     timeAttack("addColumns(1)"):
         df2.addColumns(
             columns = {
-                "b": @[0,1,2,3,4,5,6,7],
                 "e": @[0,1,2,3,4,5,6,7],
             }
         )
@@ -269,10 +268,30 @@ proc toBe*() =
     timeAttack("addColumns(2)"):
         df2.addColumns(
             columns = {
-                "b": @[0,0,0,0,0,0,0],
                 "f": @[0,0,0,0,0,0,0],
+                "g": @[1,1,],
             },
-            fillEmpty = true
+            fillEmpty = true,
+        )
+        df2.show(true)
+    #
+    timeAttack("addColumns(3)"):
+        df2.addColumns(
+            columns = {
+                "b": @[1,1,1,1,1,1,1,1]
+            },
+            override = true
+        )
+        df2.show(true)
+    #
+    timeAttack("addColumns(4)"):
+        df2.addColumns(
+            columns = {
+                "f": @[9,9,9,9,9],
+                "g": @[9,9]
+            },
+            fillEmpty = true,
+            override = true,
         )
         df2.show(true)
     #
