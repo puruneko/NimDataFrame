@@ -179,6 +179,8 @@ proc toBe*() =
         df.groupby(["time","name"]).mean().show(true)
     timeAttack("groupby max"):
         df.groupby(["time","name"]).max().show(true)
+    timeAttack("groupby sum"):
+        df.groupby(["time","name"]).sum().show(true)
     #
     proc aggFnG(s: Series): float {.closure.} =
         result = s.toFloat().mean()/100

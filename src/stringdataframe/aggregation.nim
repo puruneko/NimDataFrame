@@ -221,7 +221,6 @@ proc groupby*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFram
     ## DataFrameを指定の列の値でグループ化する（戻り値はDataFrameGroupBy型）.
     ## 
     
-    let tStart = cpuTime()
     result = initStringDataFrameGroupBy(df)
     #マルチインデックスの作成
     let multiIndex =
@@ -232,7 +231,6 @@ proc groupby*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFram
                     index.add(df[colName][i])
                 index
     let multiIndexSet = toHashSet(multiIndex).toSeq()
-    echo cpuTime() - tStart
     #データのグループ化
     result.indexCol = df.indexCol
     result.columns = colNames.toSeq()
@@ -241,10 +239,8 @@ proc groupby*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFram
         result.group.add(@[])
         result.multiIndexTable[mi] = i
         i.inc()
-    echo cpuTime() - tStart
     for i, mi in multiIndex.pairs():
-        for colIndex, colName in df.columns.pairs():
-            result.group[result.multiIndexTable[mi]].add(i)
+        result.group[result.multiIndexTable[mi]].add(i)
     result.multiIndex = multiIndexSet
 
 proc agg*[T](dfg: StringDataFrameGroupBy, aggFn: openArray[(ColName,Series -> T)]): StringDataFrame =
