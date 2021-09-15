@@ -12,7 +12,7 @@ import math
 import encodings
 import re
 
-import ../src/nimdataframe
+import ../src/stringdataframe
 
 template timeAttack(name: static[string], body: untyped): untyped =
     echo name & "####################"
@@ -23,7 +23,7 @@ template timeAttack(name: static[string], body: untyped): untyped =
     echo "t: " & $(int((cpuTime() - tStart)*1000)) & "[ms]"
 
 
-proc applyFnG(df: DataFrame): Table[ColName,Cell] =
+proc applyFnG(df: StringDataFrame): Table[ColName,Cell] =
     var c: Cell
     if df["name"][0] == "abc":
         c = df["sales"].intMap(c => c/10).mean()
@@ -40,7 +40,7 @@ proc toBe*() =
     when huge:
         proc echo3[T](a: varargs[T]) =
             discard
-        proc show(a: DataFrame, b: bool) =
+        proc show(a: StringDataFrame, b: bool) =
             discard
     else:
         proc echo3[T](a: varargs[T]) =
@@ -416,7 +416,7 @@ proc toBe*() =
 
     #
     timeAttack("healthCheck"):
-        var df_h = initDataFrame()
+        var df_h = initStringDataFrame()
         df_h["a"] = @[1]
         df_h["b"] = @[1,2,3,4,5]
         df_h.indexCol = "a"

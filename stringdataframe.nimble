@@ -1,5 +1,5 @@
 # Package
-name          = "nimdataframe"
+name          = "stringdataframe"
 version       = "0.1.0"
 author        = "puruneko"
 description   = "dirty implementation data frame library for Nim"

@@ -98,7 +98,7 @@ echo cpuTime() - tStart
 type ColName = string
 type ColType = enum
     IntCol, FloatCol, StringCol, DatetimeCol
-type DataFrame[T] = object
+type StringDataFrame[T] = object
     data: T
     columns: seq[ColName]
     colIndex: Table[ColName, int]
@@ -121,8 +121,8 @@ proc initData[T](columnsWithType: openArray[(ColName, ColType)]): T =
     var res: getDataFrameData(columnsWithType)
     result = res
 
-proc initDataFrame[T](columnsWithType: openArray[(ColName, ColType)]): DataFrame[T] =
-    result = DataFrame[getDataFrameData(columnsWithType)]
+proc initStringDataFrame[T](columnsWithType: openArray[(ColName, ColType)]): StringDataFrame[T] =
+    result = StringDataFrame[getDataFrameData(columnsWithType)]
     result.columns = @[]
     result.colIndex = initTable[ColName, int]()
     result.colType = initTable[ColName, ColType]()
@@ -137,7 +137,7 @@ var ct =
     collect(newSeq):
         for (c, t) in zip(columns, types):
             (c, t)
-#var df = initDataFrame(ct)
+#var df = initStringDataFrame(ct)
 
 var df: getDataFrameData(@[IntCol, FloatCol, StringCol])
 echo typeof(df)

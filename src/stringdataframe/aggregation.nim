@@ -17,14 +17,14 @@ import calculation
 import checker
 
 ###############################################################
-proc concat*(dfs: openArray[DataFrame]): DataFrame =
+proc concat*(dfs: openArray[StringDataFrame]): StringDataFrame =
     ## 単純に下にDataFrameを連結し続ける.
     ## インデックスは最後に指定したDataFrameのインデックスとなる.
     runnableExamples:
         concat([df1, df2, df3])
     ##
 
-    result = initDataFrame()
+    result = initStringDataFrame()
     #全列名の抽出
     let columns = toHashSet(
         collect(newSeq) do:
@@ -59,7 +59,7 @@ proc indicesOf[T](s: openArray[T], key: T): seq[int] =
         if x == key:
             result.add(i)
 
-proc merge*(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], rightOn: openArray[ColName], how="inner"): DataFrame =
+proc merge*(left: StringDataFrame, right: StringDataFrame, leftOn: openArray[ColName], rightOn: openArray[ColName], how="inner"): StringDataFrame =
     ## leftとrightをマージする
     ## indexColはleftの値が使用される（how="right"の場合はrightの値）
     ## indexColの名前はleftのindexCol名がrightにもある場合は「_0」が後ろにつく
@@ -80,7 +80,7 @@ proc merge*(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], right
         var df3 = merge(df1, df2, ["a"], ["a'"], "left")
     ## 
 
-    result = initDataFrame()
+    result = initStringDataFrame()
     #
     if ["inner","left","outer"].contains(how):
         #on列が存在する場合
@@ -164,7 +164,7 @@ proc merge*(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], right
                             for colName in pickingColumnsL - toHashSet(on):
                                 result[columnsTableL[colName]].add(dfEmpty)
                     else:
-                        raise newException(NimDataFrameError, "unknown error")
+                        raise newException(StringDataFrameError, "unknown error")
             #インデックスの設定
             result.indexCol = mergeIndexName
             result[mergeIndexName] = onColumn
@@ -174,23 +174,23 @@ proc merge*(left: DataFrame, right: DataFrame, leftOn: openArray[ColName], right
                 msg &= fmt"left column '{leftOn}' not found. "
             else:
                 msg &= fmt"right column '{leftOn}' not found. "
-            raise newException(NimDataFrameError, msg)
+            raise newException(StringDataFrameError, msg)
     elif how == "right":
         result = merge(right, left, rightOn, leftOn, "left")
     else:
-        raise newException(NimDataFrameError, fmt"invalid method '{how}'")
+        raise newException(StringDataFrameError, fmt"invalid method '{how}'")
     result.healthCheck(raiseException=true)
 
-proc merge*(left: DataFrame, right: DataFrame, leftOn: ColName, rightOn: ColName, how="inner"): DataFrame =
+proc merge*(left: StringDataFrame, right: StringDataFrame, leftOn: ColName, rightOn: ColName, how="inner"): StringDataFrame =
     merge(left, right, [leftOn], [rightOn], how)
 
-proc merge*(left: DataFrame, right: DataFrame, on: openArray[ColName], how="inner"): DataFrame =
+proc merge*(left: StringDataFrame, right: StringDataFrame, on: openArray[ColName], how="inner"): StringDataFrame =
     merge(left, right, on, on, how)
 
-proc merge*(left: DataFrame, right: DataFrame, on: ColName, how="inner"): DataFrame =
+proc merge*(left: StringDataFrame, right: StringDataFrame, on: ColName, how="inner"): StringDataFrame =
     merge(left, right, [on], [on], how)
 
-proc join*(dfSource: DataFrame, dfArray: openArray[DataFrame], how="left"): DataFrame =
+proc join*(dfSource: StringDataFrame, dfArray: openArray[StringDataFrame], how="left"): StringDataFrame =
     let dfs = concat(@[dfSource], dfArray.toSeq())
     #重複列の名前とその変更後の名前を求めておく
     var dupColsSeq: seq[ColName] = @[]
@@ -213,16 +213,16 @@ proc join*(dfSource: DataFrame, dfArray: openArray[DataFrame], how="left"): Data
         result = merge(result, df, result.indexCol, df.indexCol, how)
     result.healthCheck(raiseException=true)
 
-proc join*(dfSource: DataFrame, df: DataFrame, how="left"): DataFrame =
+proc join*(dfSource: StringDataFrame, df: StringDataFrame, how="left"): StringDataFrame =
     join(dfSource, [df], how)
 
 ###############################################################
-proc groupby*(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
+proc groupby*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFrameGroupBy =
     ## DataFrameを指定の列の値でグループ化する（戻り値はDataFrameGroupBy型）.
     ## 
     
     let tStart = cpuTime()
-    result = initDataFrameGroupBy(df)
+    result = initStringDataFrameGroupBy(df)
     #マルチインデックスの作成
     let multiIndex =
         collect(newSeq):
@@ -247,7 +247,7 @@ proc groupby*(df: DataFrame, colNames: openArray[ColName]): DataFrameGroupBy =
             result.group[result.multiIndexTable[mi]].add(i)
     result.multiIndex = multiIndexSet
 
-proc agg*[T](dfg: DataFrameGroupBy, aggFn: openArray[(ColName,Series -> T)]): DataFrame =
+proc agg*[T](dfg: StringDataFrameGroupBy, aggFn: openArray[(ColName,Series -> T)]): StringDataFrame =
     ## groupbyしたDataFrameの指定列に対して関数を実行する.
     ## 指定する関数に{.closure.}オプションをつけないとエラーになる.
     runnableExamples:
@@ -256,7 +256,7 @@ proc agg*[T](dfg: DataFrameGroupBy, aggFn: openArray[(ColName,Series -> T)]): Da
         df.groupby(["col1","col2"]).agg({"col3",f})
     ##
 
-    result = initDataFrame()
+    result = initStringDataFrame()
     for (colName, _) in aggFn:
         result.addColumn(colName)
     #関数の適用
@@ -278,14 +278,14 @@ proc agg*[T](dfg: DataFrameGroupBy, aggFn: openArray[(ColName,Series -> T)]): Da
     result.indexCol = dfg.columns[0]
     result.healthCheck(raiseException=true)
 
-proc agg*(dfg: DataFrameGroupBy, aggFn: Series -> Cell): DataFrame =
+proc agg*(dfg: StringDataFrameGroupBy, aggFn: Series -> Cell): StringDataFrame =
     ## groupbyしたDataFrameに対して統計量を計算する.
     ## aggFnにはDataFrameの統計量を計算する関数を指定する.
     runnableExamples:
         df.groupby(["col1","col2"]).agg(sum)
     ##
 
-    result = initDataFrame(dfg.df)
+    result = initStringDataFrame(dfg.df)
     for colIndex, colName in result.columns.pairs():
         result[colIndex] = newSeq[Cell](dfg.multiIndex.len)
     #関数の適用
@@ -311,11 +311,11 @@ proc agg*(dfg: DataFrameGroupBy, aggFn: Series -> Cell): DataFrame =
     result.healthCheck(raiseException=true)
     echo a, b
 
-proc apply*[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): DataFrame =
+proc apply*[T](dfg: StringDataFrameGroupBy, applyFn: StringDataFrame -> Table[ColName,T]): StringDataFrame =
     ## groupby下DataFrameの各groupに対して関数を実行する.
     ## applyFn関数はTableを返すことに注意.
     runnableExamples:
-        proc f(df: DataFrame): Table[ColName,Cell] =
+        proc f(df: StringDataFrame): Table[ColName,Cell] =
             var cell: Cell
             if df["col2"][0] == "abc":
                 cell = df["col3"].intMap(c => c/10).mean()
@@ -327,7 +327,7 @@ proc apply*[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): D
         df.groupby(["col1","col2"]).apply(f)
     ##
 
-    result = initDataFrame()
+    result = initStringDataFrame()
     for mi in dfg.multiIndex:
         #関数の計算
         var applyTable = applyFn(dfg.df[dfg.group[dfg.multiIndexTable[mi]]])
@@ -346,14 +346,14 @@ proc apply*[T](dfg: DataFrameGroupBy, applyFn: DataFrame -> Table[ColName,T]): D
     result.indexCol = dfg.columns[0]
     result.healthCheck(raiseException=true)
 
-proc aggMath*(dfg: DataFrameGroupBy, aggMathFn: openArray[float] -> float): DataFrame =
+proc aggMath*(dfg: StringDataFrameGroupBy, aggMathFn: openArray[float] -> float): StringDataFrame =
     ## groupbyしたDataFrameに対して統計量を計算する.
     ## aggFnにはDataFrameの統計量を計算する関数を指定する.
     runnableExamples:
         df.groupby(["col1","col2"]).agg(sum)
     ##
 
-    result = initDataFrame(dfg.df)
+    result = initStringDataFrame(dfg.df)
     var fSeriesSeq: seq[seq[float]] = @[]
     var validColumns: seq[int] = @[]
     for colIndex, colName in result.columns.pairs():
@@ -389,25 +389,25 @@ proc aggMath*(dfg: DataFrameGroupBy, aggMathFn: openArray[float] -> float): Data
     result.healthCheck(raiseException=true)
     echo a, b
 
-proc count*(dfg: DataFrameGroupBy): DataFrame =
+proc count*(dfg: StringDataFrameGroupBy): StringDataFrame =
     proc count(s: openArray[float]): float =
         float(s.len)
     dfg.aggMath(count)
-proc sum*(dfg: DataFrameGroupBy): DataFrame =
+proc sum*(dfg: StringDataFrameGroupBy): StringDataFrame =
     dfg.aggMath(sum)
-proc mean*(dfg: DataFrameGroupBy): DataFrame =
+proc mean*(dfg: StringDataFrameGroupBy): StringDataFrame =
     dfg.aggMath(mean)
-proc std*(dfg: DataFrameGroupBy): DataFrame =
+proc std*(dfg: StringDataFrameGroupBy): StringDataFrame =
     dfg.aggMath(stats.standardDeviation)
-proc max*(dfg: DataFrameGroupBy): DataFrame =
+proc max*(dfg: StringDataFrameGroupBy): StringDataFrame =
     dfg.aggMath(max)
-proc min*(dfg: DataFrameGroupBy): DataFrame =
+proc min*(dfg: StringDataFrameGroupBy): StringDataFrame =
     dfg.aggMath(min)
-proc v*(dfg: DataFrameGroupBy): DataFrame =
+proc v*(dfg: StringDataFrameGroupBy): StringDataFrame =
     dfg.aggMath(stats.variance)
 
 ###############################################################
-proc resample*(df: DataFrame, window: int, format=defaultDatetimeFormat): DataFrameResample =
+proc resample*(df: StringDataFrame, window: int, format=defaultDatetimeFormat): StringDataFrameResample =
     ## DataFrameを指定の行数でリサンプルする（戻り値はDataFrameResample型）.
     ##
 
@@ -415,7 +415,7 @@ proc resample*(df: DataFrame, window: int, format=defaultDatetimeFormat): DataFr
     result.window = $window
     result.format = format
 
-proc resample*(df: DataFrame, window: string, format=defaultDatetimeFormat): DataFrameResample =
+proc resample*(df: StringDataFrame, window: string, format=defaultDatetimeFormat): StringDataFrameResample =
     result.data = df
     result.window = window
     result.format = format
@@ -457,7 +457,7 @@ proc flattenDatetime*(dt: DateTime, datetimeId: string): DateTime =
 
 template resampleAggTemplate(body: untyped): untyped{.dirty.} =
     let tStart = cpuTime()
-    result = initDataFrame()
+    result = initStringDataFrame()
     #数字指定かdatetime指定か判断する
     var matches: array[2, string]
     let matchOk = match(dfre.window, re"(\d+)([YmdHMS])?", matches)
@@ -537,18 +537,18 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
             except:
                 #インデックスがdatetimeフォーマットでない場合、エラー
                 if not isDatetimeSeries(dfre.data[dfre.data.indexCol]):
-                    raise newException(NimDataFrameError, "index column isn't datetime format")
+                    raise newException(StringDataFrameError, "index column isn't datetime format")
                 else:
                     raise
         #指定フォーマットでない場合
         else:
-            raise newException(NimDataFrameError, "invalid datetime format")
+            raise newException(StringDataFrameError, "invalid datetime format")
     #指定フォーマットにひっからなかった場合（エラー）
     else:
-        raise newException(NimDataFrameError, "invalid datetime format")
+        raise newException(StringDataFrameError, "invalid datetime format")
     result.healthCheck(raiseException=true)
 
-proc agg*[T](dfre: DataFrameResample, fn: openArray[(ColName, Series -> T)]): DataFrame =
+proc agg*[T](dfre: StringDataFrameResample, fn: openArray[(ColName, Series -> T)]): StringDataFrame =
     ## リサンプルされたDataFrameの各グループの指定列に対して関数fnを適用する
     ## 指定する関数に{.closure.}オプションをつけないとエラーになる.
     runnableExamples:
@@ -563,7 +563,7 @@ proc agg*[T](dfre: DataFrameResample, fn: openArray[(ColName, Series -> T)]): Da
             #temporarySeries[k][index] = f(seriesSeq[colIndices[k]][slice]).parseString()
             result[colName].add(f(dfre.data[colName][slice]))
 
-proc agg*[T](dfre: DataFrameResample, fn: Series -> T): DataFrame =
+proc agg*[T](dfre: StringDataFrameResample, fn: Series -> T): StringDataFrame =
     ## リサンプルされたDataFrameの各グループの全列に対して関数fnを適用する
     runnableExamples:
         df.resample("30M").agg(mean)
@@ -575,11 +575,11 @@ proc agg*[T](dfre: DataFrameResample, fn: Series -> T): DataFrame =
             #temporarySeries[colIndex][index] = fn(seriesSeq[colIndex][slice]).parseString()
             result[colIndex].add(fn(dfre.data[colIndex][slice]))
 
-proc apply*[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): DataFrame =
+proc apply*[T](dfre: StringDataFrameResample, fn: StringDataFrame -> Table[ColName,T]): StringDataFrame =
     ## リサンプルされたDataFrameの各グループのDataFrameに対して関数fnを適用する
     ## 関数fnはTableを返すことに注意.
     runnableExamples:
-        proc f(df: DataFrame): Table[ColName,Cell] =
+        proc f(df: StringDataFrame): Table[ColName,Cell] =
             var cell: Cell
             if df["col2"][0] == "abc":
                 cell = df["col3"].intMap(c => c/10).mean()
@@ -593,7 +593,7 @@ proc apply*[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): Data
 
     resampleAggTemplate:
         #applyFnに渡すDataFrame作成
-        var dfTemp = initDataFrame(dfre.data)
+        var dfTemp = initStringDataFrame(dfre.data)
         if slice.b >= dataLen:
             slice.b = dataLen-1
         for colIndex, colName in dfre.data.columns.pairs():
@@ -605,9 +605,9 @@ proc apply*[T](dfre: DataFrameResample, fn: DataFrame -> Table[ColName,T]): Data
                 result.addColumn(colName)
             result[colName].add(c)
 
-proc aggMath*(dfre: DataFrameResample, fn: openArray[float] -> float): DataFrame =
+proc aggMath*(dfre: StringDataFrameResample, fn: openArray[float] -> float): StringDataFrame =
     let tStart = cpuTime()
-    result = initDataFrame()
+    result = initStringDataFrame()
     var fSeriesSeq: seq[seq[float]] = @[]
     var validColumns: seq[int] = @[]
     for colIndex, colName in dfre.data.columns:
@@ -692,37 +692,37 @@ proc aggMath*(dfre: DataFrameResample, fn: openArray[float] -> float): DataFrame
             except:
                 #インデックスがdatetimeフォーマットでない場合、エラー
                 if not isDatetimeSeries(dfre.data[dfre.data.indexCol]):
-                    raise newException(NimDataFrameError, "index column isn't datetime format")
+                    raise newException(StringDataFrameError, "index column isn't datetime format")
                 else:
                     raise
         #指定フォーマットでない場合
         else:
-            raise newException(NimDataFrameError, "invalid datetime format")
+            raise newException(StringDataFrameError, "invalid datetime format")
     #指定フォーマットにひっからなかった場合（エラー）
     else:
-        raise newException(NimDataFrameError, "invalid datetime format")
+        raise newException(StringDataFrameError, "invalid datetime format")
     result.healthCheck(raiseException=true)
 
-proc count*(dfre: DataFrameResample): DataFrame =
+proc count*(dfre: StringDataFrameResample): StringDataFrame =
     proc count(s: openArray[float]): float =
         float(s.len)
     dfre.aggMath(count)
-proc sum*(dfre: DataFrameResample): DataFrame =
+proc sum*(dfre: StringDataFrameResample): StringDataFrame =
     dfre.aggMath(sum)
-proc mean*(dfre: DataFrameResample): DataFrame =
+proc mean*(dfre: StringDataFrameResample): StringDataFrame =
     dfre.aggMath(mean)
-proc std*(dfre: DataFrameResample): DataFrame =
+proc std*(dfre: StringDataFrameResample): StringDataFrame =
     dfre.aggMath(stats.standardDeviation)
-proc max*(dfre: DataFrameResample): DataFrame =
+proc max*(dfre: StringDataFrameResample): StringDataFrame =
     dfre.aggMath(max)
-proc min*(dfre: DataFrameResample): DataFrame =
+proc min*(dfre: StringDataFrameResample): StringDataFrame =
     dfre.aggMath(min)
-proc v*(dfre: DataFrameResample): DataFrame =
+proc v*(dfre: StringDataFrameResample): StringDataFrame =
     dfre.aggMath(stats.variance)
 
 
 ###############################################################
-proc rolling*(df: DataFrame, window: int, format=defaultDatetimeFormat): DataFrameRolling =
+proc rolling*(df: StringDataFrame, window: int, format=defaultDatetimeFormat): StringDataFrameRollilng =
     ## DataFrameを指定の行数でリサンプルする（戻り値はDataFrameRolling型）.
     ##
 
@@ -730,13 +730,13 @@ proc rolling*(df: DataFrame, window: int, format=defaultDatetimeFormat): DataFra
     result.window = $window
     result.format = format
 
-proc rolling*(df: DataFrame, window: string, format=defaultDatetimeFormat): DataFrameRolling =
+proc rolling*(df: StringDataFrame, window: string, format=defaultDatetimeFormat): StringDataFrameRollilng =
     result.data = df
     result.window = window
     result.format = format
 
 template rollingAggTemplate(body: untyped): untyped{.dirty.} =
-    result = initDataFrame()
+    result = initStringDataFrame()
     #数字指定かdatetime指定か判断する
     var matches: array[2, string]
     let matchOk = match(dfro.window, re"(\d+)([YmdHMS])?", matches)
@@ -754,8 +754,8 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
             when typeof(fn) is (Series -> T):#agg2用
                 for colName in dfro.data.columns:
                     result.addColumn(colName)
-            when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                var dfTmp = initDataFrame(dfro.data)
+            when typeof(fn) is (StringDataFrame -> Table[ColName,T]):#apply用
+                var dfTmp = initStringDataFrame(dfro.data)
                 var sliceTmp = 0..1
                 if sliceTmp.b >= dataLen:
                     sliceTmp.b = dataLen-1
@@ -800,8 +800,8 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
                 when typeof(fn) is (Series -> T):#agg2用
                     for colName in dfro.data.columns:
                         result.addColumn(colName)
-                when typeof(fn) is (DataFrame -> Table[ColName,T]):#apply用
-                    var dfTmp = initDataFrame(dfro.data)
+                when typeof(fn) is (StringDataFrame -> Table[ColName,T]):#apply用
+                    var dfTmp = initStringDataFrame(dfro.data)
                     var sliceTmp = 0..1
                     if sliceTmp.b >= dataLen:
                         sliceTmp.b = dataLen-1
@@ -832,18 +832,18 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
             except:
                 #インデックスがdatetimeフォーマットでない場合、エラー
                 if not isDatetimeSeries(dfro.data[dfro.data.indexCol]):
-                    raise newException(NimDataFrameError, "index column isn't datetime format")
+                    raise newException(StringDataFrameError, "index column isn't datetime format")
                 else:
                     raise
         #指定フォーマットでない場合
         else:
-            raise newException(NimDataFrameError, "invalid datetime format")
+            raise newException(StringDataFrameError, "invalid datetime format")
     #指定フォーマットにひっからなかった場合（エラー）
     else:
-        raise newException(NimDataFrameError, "invalid datetime format")
+        raise newException(StringDataFrameError, "invalid datetime format")
     result.healthCheck(raiseException=true)
 
-proc agg*[T](dfro: DataFrameRolling, fn: openArray[(ColName, Series -> T)]): DataFrame =
+proc agg*[T](dfro: StringDataFrameRollilng, fn: openArray[(ColName, Series -> T)]): StringDataFrame =
     ## rollingされたDataFrameの各グループの指定列に対して関数fnを適用する
     ## 指定する関数に{.closure.}オプションをつけないとエラーになる.
     runnableExamples:
@@ -857,7 +857,7 @@ proc agg*[T](dfro: DataFrameRolling, fn: openArray[(ColName, Series -> T)]): Dat
             #result.data[colName].add(f(seriesSeq[colTable[colName]][slice]).parseString())
             result[colName].add(f(dfro.data[colName][slice]))
 
-proc agg*[T](dfro: DataFrameRolling, fn: Series -> T): DataFrame =
+proc agg*[T](dfro: StringDataFrameRollilng, fn: Series -> T): StringDataFrame =
     ## rollingされたDataFrameの各グループの全列に対して関数fnを適用する
     runnableExamples:
         df.resample("30M").agg(mean)
@@ -868,11 +868,11 @@ proc agg*[T](dfro: DataFrameRolling, fn: Series -> T): DataFrame =
             #result.data[colName].add(fn(seriesSeq[colIndex][slice]).parseString())
             result[colName].add(fn(dfro.data[colIndex][slice]))
 
-proc apply*[T](dfro: DataFrameRolling, fn: DataFrame -> Table[ColName,T]): DataFrame =
+proc apply*[T](dfro: StringDataFrameRollilng, fn: StringDataFrame -> Table[ColName,T]): StringDataFrame =
     ## rollingされたDataFrameの各グループのDataFrameに対して関数fnを適用する
     ## 関数fnはTableを返すことに注意.
     runnableExamples:
-        proc f(df: DataFrame): Table[ColName,Cell] =
+        proc f(df: StringDataFrame): Table[ColName,Cell] =
             var cell: Cell
             if df["col2"][0] == "abc":
                 cell = df["col3"].intMap(c => c/10).mean()
@@ -886,7 +886,7 @@ proc apply*[T](dfro: DataFrameRolling, fn: DataFrame -> Table[ColName,T]): DataF
 
     rollingAggTemplate:
         #applyFnに渡すDataFrame作成
-        var dfTemp = initDataFrame(dfro.data)
+        var dfTemp = initStringDataFrame(dfro.data)
         if slice.b >= dataLen:
             slice.b = dataLen-1
         for colName in dfro.data.columns:
@@ -896,8 +896,8 @@ proc apply*[T](dfro: DataFrameRolling, fn: DataFrame -> Table[ColName,T]): DataF
         for (colName, c) in applyTable.pairs():
             result[colName].add(c)
 
-proc aggMath*(dfro: DataFrameRolling, fn: openArray[float] -> float): DataFrame =
-    result = initDataFrame()
+proc aggMath*(dfro: StringDataFrameRollilng, fn: openArray[float] -> float): StringDataFrame =
+    result = initStringDataFrame()
     var fSeriesSeq: seq[seq[float]] = @[]
     var validColumns: seq[int] = @[]
     for colIndex, colName in dfro.data.columns:
@@ -968,30 +968,30 @@ proc aggMath*(dfro: DataFrameRolling, fn: openArray[float] -> float): DataFrame 
             except:
                 #インデックスがdatetimeフォーマットでない場合、エラー
                 if not isDatetimeSeries(dfro.data[dfro.data.indexCol]):
-                    raise newException(NimDataFrameError, "index column isn't datetime format")
+                    raise newException(StringDataFrameError, "index column isn't datetime format")
                 else:
                     raise
         #指定フォーマットでない場合
         else:
-            raise newException(NimDataFrameError, "invalid datetime format")
+            raise newException(StringDataFrameError, "invalid datetime format")
     #指定フォーマットにひっからなかった場合（エラー）
     else:
-        raise newException(NimDataFrameError, "invalid datetime format")
+        raise newException(StringDataFrameError, "invalid datetime format")
     result.healthCheck(raiseException=true)
 
-proc count*(dfro: DataFrameRolling): DataFrame =
+proc count*(dfro: StringDataFrameRollilng): StringDataFrame =
     proc count(s: openArray[float]): float =
         float(s.len)
     dfro.aggMath(count)
-proc sum*(dfro: DataFrameRolling): DataFrame =
+proc sum*(dfro: StringDataFrameRollilng): StringDataFrame =
     dfro.aggMath(sum)
-proc mean*(dfro: DataFrameRolling): DataFrame =
+proc mean*(dfro: StringDataFrameRollilng): StringDataFrame =
     dfro.aggMath(mean)
-proc std*(dfro: DataFrameRolling): DataFrame =
+proc std*(dfro: StringDataFrameRollilng): StringDataFrame =
     dfro.aggMath(stats.standardDeviation)
-proc max*(dfro: DataFrameRolling): DataFrame =
+proc max*(dfro: StringDataFrameRollilng): StringDataFrame =
     dfro.aggMath(max)
-proc min*(dfro: DataFrameRolling): DataFrame =
+proc min*(dfro: StringDataFrameRollilng): StringDataFrame =
     dfro.aggMath(min)
-proc v*(dfro: DataFrameRolling): DataFrame =
+proc v*(dfro: StringDataFrameRollilng): StringDataFrame =
     dfro.aggMath(stats.variance)

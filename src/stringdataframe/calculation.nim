@@ -140,7 +140,7 @@ proc min*(s: Series): Cell =
 proc v*(s: Series): Cell =
     s.aggMath(stats.variance)
 
-proc agg*[T](df: DataFrame, aggFn: Series -> T): Row =
+proc agg*[T](df: StringDataFrame, aggFn: Series -> T): Row =
     ## DataFrameの各列に対して統計量を計算する.
     ## aggFnにはSeriesの統計量を計算する関数を指定する.
     runnableExamples:
@@ -151,17 +151,17 @@ proc agg*[T](df: DataFrame, aggFn: Series -> T): Row =
     for (colName, s) in zip(df.columns, df.data):
         result[colName] = aggFn(s).parseString()
 
-proc count*(df: DataFrame): Row =
+proc count*(df: StringDataFrame): Row =
     df.agg(count)
-proc sum*(df: DataFrame): Row =
+proc sum*(df: StringDataFrame): Row =
     df.agg(sum)
-proc mean*(df: DataFrame): Row =
+proc mean*(df: StringDataFrame): Row =
     df.agg(mean)
-proc std*(df: DataFrame): Row =
+proc std*(df: StringDataFrame): Row =
     df.agg(std)
-proc max*(df: DataFrame): Row =
+proc max*(df: StringDataFrame): Row =
     df.agg(max)
-proc min*(df: DataFrame): Row =
+proc min*(df: StringDataFrame): Row =
     df.agg(min)
-proc v*(df: DataFrame): Row =
+proc v*(df: StringDataFrame): Row =
     df.agg(v)

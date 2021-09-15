@@ -12,7 +12,7 @@ import re
 import typedef
 
 ###############################################################
-type NimDataFrameError* = object of CatchableError
+type StringDataFrameError* = object of CatchableError
 type UnimplementedError* = object of CatchableError
 
 
@@ -37,20 +37,20 @@ proc initSeries*(): Series =
 proc initFilterSeries*(): FilterSeries =
     result = @[]
 
-template `[]`*(df: DataFrame, colName: ColName): untyped =
+template `[]`*(df: StringDataFrame, colName: ColName): untyped =
     ## DataFrameからSeriesを取り出す.
     df.data[df.colTable[colName]]
 
-template `[]`*(df: DataFrame, colIndex: int): untyped =
+template `[]`*(df: StringDataFrame, colIndex: int): untyped =
     ## DataFrameからSeriesを取り出す.
     df.data[colIndex]
 
-proc addColumn*(df: var DataFrame, colName: ColName) =
+proc addColumn*(df: var StringDataFrame, colName: ColName) =
     df.data.add(initSeries())
     df.columns.add(colName)
     df.colTable[colName] = df.columns.len - 1
 
-proc `[]=`*[T](df: var DataFrame, colIndex: int, right: openArray[T]) =
+proc `[]=`*[T](df: var StringDataFrame, colIndex: int, right: openArray[T]) =
     ## DataFrameのSeriesに代入する.
     ## 代入されるarrayの各値はstringにキャストされる.
     
@@ -59,17 +59,17 @@ proc `[]=`*[T](df: var DataFrame, colIndex: int, right: openArray[T]) =
     else:
         df.data[colIndex] = right.toString()
 
-proc `[]=`*[T](df: var DataFrame, colName: ColName, right: openArray[T]) =
+proc `[]=`*[T](df: var StringDataFrame, colName: ColName, right: openArray[T]) =
     if not df.columns.contains(colName):
         df.addColumn(colName)
     df[df.colTable[colName]] = right
 
-proc addColumn*(df: var DataFrame, colName: ColName, s: Series) =
+proc addColumn*(df: var StringDataFrame, colName: ColName, s: Series) =
     df.addColumn(colName)
     df[colName] = s
 
 
-iterator rows*(df: DataFrame): Row =
+iterator rows*(df: StringDataFrame): Row =
     let maxRowNumber = min(
         collect(newSeq) do:
             for colIndex, colName in df.columns.pairs():
@@ -81,11 +81,11 @@ iterator rows*(df: DataFrame): Row =
             row[colName] = df[colIndex][i]
         yield row
 
-proc getRows*(df: DataFrame): seq[Row] =
+proc getRows*(df: StringDataFrame): seq[Row] =
     for row in df.rows:
         result.add(row)
 
-proc initRow*(df: DataFrame): Row =
+proc initRow*(df: StringDataFrame): Row =
     result = initRow()
     for colName in df.columns:
         result[colName] = dfEmpty
@@ -132,15 +132,15 @@ proc toString*[T](arr: openArray[T]): Series =
         result.add(a)
 
 
-proc initDataFrame*(): DataFrame =
+proc initStringDataFrame*(): StringDataFrame =
     result.data = @[]
     result.columns = @[]
     result.colTable = initTable[ColName, int]()
     result.indexCol = defaultIndexName
     result.datetimeFormat = defaultDatetimeFormat
 
-proc initDataFrame*(df: DataFrame, copy=false): DataFrame =
-    result = initDataFrame()
+proc initStringDataFrame*(df: StringDataFrame, copy=false): StringDataFrame =
+    result = initStringDataFrame()
     result.indexCol = df.indexCol
     result.datetimeFormat = df.datetimeFormat
     for colName in df.columns:
@@ -148,7 +148,7 @@ proc initDataFrame*(df: DataFrame, copy=false): DataFrame =
         if copy:
             result[colName] = df[colName]
 
-proc initDataFrameGroupBy*(df: DataFrame): DataFrameGroupBy =
+proc initStringDataFrameGroupBy*(df: StringDataFrame): StringDataFrameGroupBy =
     result.df = df
     result.group = @[]
     result.multiIndex = @[]
@@ -156,48 +156,48 @@ proc initDataFrameGroupBy*(df: DataFrame): DataFrameGroupBy =
     result.columns = @[]
 
 
-proc len*(df: DataFrame): int =
+proc len*(df: StringDataFrame): int =
     ## DataFrameの長さを返す
     ## no healthCheck
     result = df[df.indexCol].len
 
-proc deepCopy*(df: DataFrame): DataFrame =
-    result = initDataFrame(df)
+proc deepCopy*(df: StringDataFrame): StringDataFrame =
+    result = initStringDataFrame(df)
     for i in 0..<df.len:
         for colIndex, colName in df.columns.pairs():
             result[colName].add(df[colIndex][i])
 
-proc `[]`*(df: DataFrame, colNames: openArray[ColName]): DataFrame =
+proc `[]`*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFrame =
     ## 指定した列だけ返す.
-    result = initDataFrame()
+    result = initStringDataFrame()
     for colName in colNames:
         if not df.columns.contains(colName):
-            raise newException(NimDataFrameError, fmt"df doesn't have column {colName}")
+            raise newException(StringDataFrameError, fmt"df doesn't have column {colName}")
         result[colName] = df[colName]
     result[df.indexCol] = df[df.indexCol]
 
-proc keep*(df: DataFrame, fs: FilterSeries): DataFrame =
+proc keep*(df: StringDataFrame, fs: FilterSeries): StringDataFrame =
     ## trueをkeepする（fsがtrueの行だけ返す）.
-    result = initDataFrame(df)
+    result = initStringDataFrame(df)
     for colIndex, colName in df.columns.pairs():
         for i, b in fs.pairs():
             if b:
                 result[colIndex].add(df[colIndex][i])
-proc drop*(df: DataFrame, fs: FilterSeries): DataFrame =
+proc drop*(df: StringDataFrame, fs: FilterSeries): StringDataFrame =
     ## trueをdropする（fsがtrueの行を落として返す）（fsがfalseの行だけ返す）.
-    result = initDataFrame(df)
+    result = initStringDataFrame(df)
     for colIndex, colName in df.columns.pairs():
         for i, b in fs.pairs():
             if not b:
                 result[colIndex].add(df[colIndex][i])
 
-proc `[]`*(df: DataFrame, fs: FilterSeries): DataFrame =
+proc `[]`*(df: StringDataFrame, fs: FilterSeries): StringDataFrame =
     ## fsがtrueの行だけ返す.
     df.keep(fs)
 
-proc `[]`*(df: DataFrame, slice: HSlice[int, int]): DataFrame =
+proc `[]`*(df: StringDataFrame, slice: HSlice[int, int]): StringDataFrame =
     ## sliceの範囲の行だけ返す.
-    result = initDataFrame(df)
+    result = initStringDataFrame(df)
     let dfLen = df.len
     for i in slice:
         if i < 0 or i >= dfLen:
@@ -205,9 +205,9 @@ proc `[]`*(df: DataFrame, slice: HSlice[int, int]): DataFrame =
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][i])
 
-proc `[]`*(df: DataFrame, indices: openArray[int]): DataFrame =
+proc `[]`*(df: StringDataFrame, indices: openArray[int]): StringDataFrame =
     ## indicesの行だけ返す.
-    result = initDataFrame(df)
+    result = initStringDataFrame(df)
     let dfLen = df.len
     for i in indices:
         if i < 0 or i >= dfLen:
@@ -215,40 +215,40 @@ proc `[]`*(df: DataFrame, indices: openArray[int]): DataFrame =
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][i])
 
-proc iloc*(df: DataFrame, i: int): Row =
+proc iloc*(df: StringDataFrame, i: int): Row =
     ## index番目の行をRow形式で返す.
     result = initRow()
     for colIndex, colName in df.columns.pairs():
         result[colName] = df[colIndex][i]
 
-proc loc*(df: DataFrame, c: Cell): DataFrame =
+proc loc*(df: StringDataFrame, c: Cell): StringDataFrame =
     ## indexの行の値がcの値と一致する行を返す.
-    result = initDataFrame(df)
+    result = initStringDataFrame(df)
     for i in 0..<df.len:
         if df[df.indexCol][i] == c:
             for colIndex, colName in df.columns.pairs():
                 result[colIndex].add(df[colIndex][i])
 
-proc head*(df: DataFrame, num: int): DataFrame =
-    result = initDataFrame(df)
+proc head*(df: StringDataFrame, num: int): StringDataFrame =
+    result = initStringDataFrame(df)
     for i in 0..<min(num,df.len):
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][i])
-proc tail*(df: DataFrame, num: int): DataFrame =
-    result = initDataFrame(df)
+proc tail*(df: StringDataFrame, num: int): StringDataFrame =
+    result = initStringDataFrame(df)
     for i in df.len-min(num,df.len)..<df.len:
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][i])
 
-proc index*(df: DataFrame): Series =
+proc index*(df: StringDataFrame): Series =
     df[df.indexCol]
 
-proc shape*(df: DataFrame): (int,int) =
+proc shape*(df: StringDataFrame): (int,int) =
     let colNumber = df.columns.len
     let rowNumber = df.len
     result = (rowNumber, colNumber)
 
-proc size*(df: DataFrame, excludeIndex=false): int =
+proc size*(df: StringDataFrame, excludeIndex=false): int =
     result = df.len * (
         if excludeIndex:
             df.columns.len - 1
@@ -257,7 +257,7 @@ proc size*(df: DataFrame, excludeIndex=false): int =
     )
 
 
-proc appendRow*(df: DataFrame, row: Row, autoIndex=false, fillEmpty=false): DataFrame =
+proc appendRow*(df: StringDataFrame, row: Row, autoIndex=false, fillEmpty=false): StringDataFrame =
     result = df
     var columns: seq[ColName] = @[]
     for colName in row.keys:
@@ -297,21 +297,21 @@ proc appendRow*(df: DataFrame, row: Row, autoIndex=false, fillEmpty=false): Data
                         else:
                             result[colName].add(dfEmpty)
     else:
-        raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
+        raise newException(StringDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
 
-proc appendRow*[T](df: DataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false): DataFrame =
+proc appendRow*[T](df: StringDataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false): StringDataFrame =
     var newRow: Row
     for (colName, value) in row:
         newRow[colName] = value.parseString()
     result = df.appendRow(newRow, autoIndex, fillEmpty)
 
-proc addRow*(df: var DataFrame, row: Row, autoIndex=false, fillEmpty=false) =
+proc addRow*(df: var StringDataFrame, row: Row, autoIndex=false, fillEmpty=false) =
     df = df.appendRow(row, autoIndex, fillEmpty)
 
-proc addRow*[T](df: var DataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false) =
+proc addRow*[T](df: var StringDataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false) =
     df = df.appendRow(row, autoIndex, fillEmpty)
 
-proc appendRows*[T](df: DataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false): DataFrame =
+proc appendRows*[T](df: StringDataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false): StringDataFrame =
     ##
     runnableExamples:
         var df = toDataFrame(
@@ -407,15 +407,15 @@ proc appendRows*[T](df: DataFrame, items: openArray[(ColName, seq[T])], autoInde
                             for c in itemTable[colName]:
                                 result[colName].add(c)
         else:
-            raise newException(NimDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
+            raise newException(StringDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
     else:
-        raise newException(NimDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
+        raise newException(StringDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
 
-proc addRows*[T](df: var DataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false) =
+proc addRows*[T](df: var StringDataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false) =
     df = df.appendRows(items, autoIndex, fillEmptyRow, fillEmptyCol)
 
 #TODO: overrideオプションつける
-proc appendColumns*[T](df: DataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false, override=false): DataFrame =
+proc appendColumns*[T](df: StringDataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false, override=false): StringDataFrame =
     result = df
     let columnTable = columns.toTable()
     var lengths: seq[int] = @[]
@@ -460,18 +460,18 @@ proc appendColumns*[T](df: DataFrame, columns: openArray[(ColName, seq[T])], fil
                         result[colName].add(columnTable[colName][i])
     else:
         if lengthHash.len != 1:
-            raise newException(NimDataFrameError, fmt"argument 'columns'({lengthHash}) must be same length({dfLen})")
+            raise newException(StringDataFrameError, fmt"argument 'columns'({lengthHash}) must be same length({dfLen})")
         elif fillEmpty and colLength > dfLen:
-            raise newException(NimDataFrameError, fmt"each argument 'columns'({lengthHash}) must be shorter than length of DataFrame({dfLen})")
+            raise newException(StringDataFrameError, fmt"each argument 'columns'({lengthHash}) must be shorter than length of StringDataFrame({dfLen})")
         elif not fillEmpty and (lengthHash.len != 1 or colLength != dfLen):
-            raise newException(NimDataFrameError, fmt"length of argument 'columns'({lengthHash}) must be the same as length of DataFrame({dfLen})")
+            raise newException(StringDataFrameError, fmt"length of argument 'columns'({lengthHash}) must be the same as length of StringDataFrame({dfLen})")
         else:#override
-            raise newException(NimDataFrameError, fmt"if override option is not set, argument 'columns' can not specify columns of dataframe({intersectionColumns})")
+            raise newException(StringDataFrameError, fmt"if override option is not set, argument 'columns' can not specify columns of dataframe({intersectionColumns})")
 
-proc addColumns*[T](df: var DataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false, override=false) =
+proc addColumns*[T](df: var StringDataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false, override=false) =
     df = df.appendColumns(columns, fillEmpty, override)
 
-proc dropColumns*(df: DataFrame, colNames: openArray[ColName]): DataFrame =
+proc dropColumns*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFrame =
     ## 指定のDataFrameの列を削除する.
     runnableExamples:
         df.dropColumns(["col1","col2"])
@@ -486,10 +486,10 @@ proc dropColumns*(df: DataFrame, colNames: openArray[ColName]): DataFrame =
         for cn in result.columns[itr..high(result.columns)]:
             result.colTable[cn] -= 1
 
-proc dropColumns*(df: DataFrame, colName: ColName): DataFrame =
+proc dropColumns*(df: StringDataFrame, colName: ColName): StringDataFrame =
     df.dropColumns([colName])
 
-proc deleteColumns*(df: var DataFrame, colNames: openArray[ColName]) =
+proc deleteColumns*(df: var StringDataFrame, colNames: openArray[ColName]) =
     ## 指定のDataFrameの列を削除する.
     runnableExamples:
         df.deleteColumns(["col1","col2"])
@@ -497,5 +497,5 @@ proc deleteColumns*(df: var DataFrame, colNames: openArray[ColName]) =
 
     df = df.dropColumns(colNames)
 
-proc deleteColumn*(df: var DataFrame, colName: ColName) =
+proc deleteColumn*(df: var StringDataFrame, colName: ColName) =
     df.deleteColumns([colName])

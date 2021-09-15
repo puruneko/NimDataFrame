@@ -4,18 +4,18 @@ import strformat
 import typedef
 import core
 
-proc healthCheck*(df: DataFrame, raiseException=false): bool{.discardable.} =
+proc healthCheck*(df: StringDataFrame, raiseException=false): bool{.discardable.} =
     #indexColチェック
     if not df.columns.contains(df.indexCol):
         if raiseException:
-            raise newException(NimDataFrameError, fmt"not found index column '{df.indexCol}' in DataFrame")
+            raise newException(StringDataFrameError, fmt"not found index column '{df.indexCol}' in StringDataFrame")
         return false
     #Seriesの長さチェック
     let length = df.len
     for colName in df.columns:
         if df[colName].len != length:
             if raiseException:
-                raise newException(NimDataFrameError, fmt"all series must be same length {length} (but '{colName}' is {df[colName].len})")
+                raise newException(StringDataFrameError, fmt"all series must be same length {length} (but '{colName}' is {df[colName].len})")
             return false
     return true
 

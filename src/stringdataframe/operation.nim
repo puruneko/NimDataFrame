@@ -23,8 +23,8 @@ proc fillEmpty*[T](s: Series, fill: T): Series =
                 else:
                     c
 
-proc fillEmpty*[T](df: DataFrame, fill: T): DataFrame =
-    result = initDataFrame(df)
+proc fillEmpty*[T](df: StringDataFrame, fill: T): StringDataFrame =
+    result = initStringDataFrame(df)
     for colIndex, colName in result.columns.paris():
         result[colIndex] = fillEmpty(df[colIndex], fill)
 
@@ -35,8 +35,8 @@ proc dropEmpty*(s: Series): Series =
                 if c != dfEmpty:
                     c
 
-proc dropEmpty*(df: DataFrame): DataFrame =
-    result = initDataFrame(df)
+proc dropEmpty*(df: StringDataFrame): StringDataFrame =
+    result = initStringDataFrame(df)
     for i in 0..<df.len:
         var skip = false
         for colIndex, colName in result.columns.pairs():
@@ -50,7 +50,7 @@ proc dropEmpty*(df: DataFrame): DataFrame =
 
 
 ###############################################################
-proc renameColumns*(df: DataFrame, renameMap: openArray[(ColName,ColName)]): DataFrame =
+proc renameColumns*(df: StringDataFrame, renameMap: openArray[(ColName,ColName)]): StringDataFrame =
     ## DataFrameの列名を変更する.
     ## renameMapには変更前列名と変更後列名のペアを指定する.
     runnableExamples:
@@ -67,8 +67,8 @@ proc renameColumns*(df: DataFrame, renameMap: openArray[(ColName,ColName)]): Dat
                 result.indexCol = renamePair[1]
 
 
-proc resetIndex*[T](df: DataFrame, fn: int -> T): DataFrame =
-    result = initDataFrame(df)
+proc resetIndex*[T](df: StringDataFrame, fn: int -> T): StringDataFrame =
+    result = initStringDataFrame(df)
     for colIndex, colName in df.columns.pairs():
         if colName == df.indexCol:
             result[colName] =
@@ -78,11 +78,11 @@ proc resetIndex*[T](df: DataFrame, fn: int -> T): DataFrame =
         else:
             result[colIndex] = df[colIndex]
 
-proc resetIndex*(df: DataFrame): DataFrame =
+proc resetIndex*(df: StringDataFrame): StringDataFrame =
     let f = proc(i: int): Cell = $i
     result = df.resetIndex(f)
 
-proc setIndex*(df: DataFrame, indexCol: ColName): DataFrame =
+proc setIndex*(df: StringDataFrame, indexCol: ColName): StringDataFrame =
     result = df
     result.indexCol = indexCol
 
@@ -111,15 +111,15 @@ proc floatMap*[T](s: Series, fn: float -> T): Series =
 proc datetimeMap*[T](s: Series, fn: DateTime -> T, format=defaultDatetimeFormat): Series =
     map(s, fn, genParseDatetime(format))
 
-proc replace*(df: DataFrame, sub: string, by: string): DataFrame =
-    result = initDataFrame(df)
+proc replace*(df: StringDataFrame, sub: string, by: string): StringDataFrame =
+    result = initStringDataFrame(df)
     proc f(c: Cell): Cell =
         c.replace(sub, by)
     for colIndex, colName in df.columns.pairs():
         result[colIndex] = df[colIndex].map(f)
 
-proc replace*(df: DataFrame, sub: Regex, by: string): DataFrame =
-    result = initDataFrame(df)
+proc replace*(df: StringDataFrame, sub: Regex, by: string): StringDataFrame =
+    result = initStringDataFrame(df)
     proc f(c: Cell): Cell =
         c.replacef(sub, by)
     for colIndex, colName in df.columns.pairs():
@@ -127,7 +127,7 @@ proc replace*(df: DataFrame, sub: Regex, by: string): DataFrame =
 
 
 ###############################################################
-proc filter*(df: DataFrame, fltr: Row -> bool): DataFrame =
+proc filter*(df: StringDataFrame, fltr: Row -> bool): StringDataFrame =
     ## fltr関数に従ってDataFrameにフィルタをかける.
     ## fltr関数にはDataFrameの各列が渡され、fltr関数は論理値を返す.
     runnableExamples:
@@ -149,11 +149,11 @@ proc cmpDec[T](x: (int,T), y: (int,T)): int =
     if x[1] < y[1]: 1
     elif x[1] == y[1]: 0
     else: -1
-proc sort*[T](df: DataFrame, colName: ColName = "", fromCell: Cell -> T, ascending=true): DataFrame =
+proc sort*[T](df: StringDataFrame, colName: ColName = "", fromCell: Cell -> T, ascending=true): StringDataFrame =
     ## DataFrameを指定列でソートする.
     ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する.
     ##
-    result = initDataFrame(df)
+    result = initStringDataFrame(df)
     let cn =
         if colName != "":
             colName
@@ -172,43 +172,43 @@ proc sort*[T](df: DataFrame, colName: ColName = "", fromCell: Cell -> T, ascendi
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][sorted[0]])
 
-proc sort*[T](df: DataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): DataFrame =
+proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): StringDataFrame =
     result = df.deepCopy()
     for colName in reversed(colNames):
         result = result.sort(colName, fromCell, ascending)
 
-proc sort*(df: DataFrame, colName: ColName = "", ascending=true): DataFrame =
+proc sort*(df: StringDataFrame, colName: ColName = "", ascending=true): StringDataFrame =
     let f = proc(c: Cell): Cell = c
     sort(df, colName, f, ascending)
-proc sort*(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFrame =
+proc sort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
     result = df.deepCopy()
     for colName in reversed(colNames):
         result = result.sort(colName, ascending)
 
-proc intSort*(df: DataFrame, colName: ColName = "", ascending=true): DataFrame =
+proc intSort*(df: StringDataFrame, colName: ColName = "", ascending=true): StringDataFrame =
     sort(df, colName, parseInt, ascending)
-proc intSort*(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFrame =
+proc intSort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.intSort(colName, ascending)
 
-proc floatSort*(df: DataFrame, colName: ColName = "", ascending=true): DataFrame =
+proc floatSort*(df: StringDataFrame, colName: ColName = "", ascending=true): StringDataFrame =
     sort(df, colName, parseFloat, ascending)
-proc floatSort*(df: DataFrame, colNames: openArray[ColName], ascending=true): DataFrame =
+proc floatSort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.floatSort(colName, ascending)
 
-proc datetimeSort*(df: DataFrame, colName: ColName = "", format=defaultDatetimeFormat, ascending=true): DataFrame =
+proc datetimeSort*(df: StringDataFrame, colName: ColName = "", format=defaultDatetimeFormat, ascending=true): StringDataFrame =
     sort(df, colName, genParseDatetime(format), ascending)
-proc datetimeSort*(df: DataFrame, colNames: openArray[ColName], format=defaultDatetimeFormat, ascending=true): DataFrame =
+proc datetimeSort*(df: StringDataFrame, colNames: openArray[ColName], format=defaultDatetimeFormat, ascending=true): StringDataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.datetimeSort(colName, format, ascending)
 
 
 ###############################################################
-proc duplicated*(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries =
+proc duplicated*(df: StringDataFrame, colNames: openArray[ColName] = []): FilterSeries =
     ## 重複した行はtrue、それ以外はfalse.
     ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス）.
     ##
@@ -229,17 +229,17 @@ proc duplicated*(df: DataFrame, colNames: openArray[ColName] = []): FilterSeries
             result.add(false)
             checker[row] = false
 
-proc dropDuplicates*(df: DataFrame, colNames: openArray[ColName] = []): DataFrame =
+proc dropDuplicates*(df: StringDataFrame, colNames: openArray[ColName] = []): StringDataFrame =
     ## 重複した行を消す.
     ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス）.
     ##
     df.drop(df.duplicated(colNames))
 
-proc transpose*(df: DataFrame): DataFrame =
-    result = initDataFrame()
+proc transpose*(df: StringDataFrame): StringDataFrame =
+    result = initStringDataFrame()
     #indexに重複がある場合、エラー
     if df.duplicated().contains(true):
-        raise newException(NimDataFrameError, "duplicate indexes are not allowed in transpose action")
+        raise newException(StringDataFrameError, "duplicate indexes are not allowed in transpose action")
     #転置処理
     let colNameTable =
         collect(initTable):
@@ -259,5 +259,5 @@ proc transpose*(df: DataFrame): DataFrame =
                     continue
                 colName
 
-proc T*(df: DataFrame): DataFrame =
+proc T*(df: StringDataFrame): StringDataFrame =
     df.transpose()

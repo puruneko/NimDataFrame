@@ -12,22 +12,22 @@ import re
 import streams
 import parsecsv
 
-import nimdataframe/typedef as typedef
+import stringdataframe/typedef as typedef
 export typedef
 
-import nimdataframe/core as core
+import stringdataframe/core as core
 export core
 
-import nimdataframe/operation as operation
+import stringdataframe/operation as operation
 export operation
 
-import nimdataframe/calculation as calculation
+import stringdataframe/calculation as calculation
 export calculation
 
-import nimdataframe/aggregation as aggregation
+import stringdataframe/aggregation as aggregation
 export aggregation
 
-import nimdataframe/checker as checker
+import stringdataframe/checker as checker
 export checker
 
 
@@ -68,7 +68,7 @@ proc toDataFrame*(
     headerRows= 0,
     indexCol="",
     encoding="utf-8"
-): DataFrame =
+): StringDataFrame =
     ## テキストで表現されたデータ構造をDataFrameに変換する.
     runnableExamples:
         var df = toDataFrame(
@@ -78,7 +78,7 @@ proc toDataFrame*(
             headerRows=1,
         )
     ##
-    result = initDataFrame()
+    result = initStringDataFrame()
     for colName in headers:
         result.addColumn(colName)
     #エンコード変換
@@ -90,7 +90,7 @@ proc toDataFrame*(
     var lineCount = 0
     for row in rowItr:
         if row.len != headers.len:
-            raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len} (line {lineCount+1})")
+            raise newException(StringDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len} (line {lineCount+1})")
         for (item, colName) in zip(row, headers):
             result[colName].add(item)
         lineCount += 1
@@ -99,7 +99,7 @@ proc toDataFrame*(
         if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
-            raise newException(NimDataFrameError, fmt"not found {indexCol}")
+            raise newException(StringDataFrameError, fmt"not found {indexCol}")
     else:
         result[defaultIndexName] =
             collect(newSeq):
@@ -112,7 +112,7 @@ proc toDataFrame*(
     headerLineNumber=1,
     indexCol="",
     encoding="utf-8"
-): DataFrame =
+): StringDataFrame =
     ## テキストで表現されたデータ構造をDataFrameに変換する.
     runnableExamples:
         var df = toDataFrame(
@@ -122,7 +122,7 @@ proc toDataFrame*(
             headerRows=1,
         )
     ##
-    result = initDataFrame()
+    result = initStringDataFrame()
     #エンコード変換
     let ec = open("utf-8", encoding)
     defer: ec.close()
@@ -138,7 +138,7 @@ proc toDataFrame*(
     var lineCount = 0
     for row in rowItr:
         if row.len != headers.len:
-            raise newException(NimDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len} (line {lineCount+1})")
+            raise newException(StringDataFrameError, fmt"header count is {headers.len}, but line item count is {row.len} (line {lineCount+1})")
         for (item, colName) in zip(row, headers):
             result[colName].add(item)
         lineCount += 1
@@ -147,14 +147,14 @@ proc toDataFrame*(
         if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
-            raise newException(NimDataFrameError, fmt"not found {indexCol}")
+            raise newException(StringDataFrameError, fmt"not found {indexCol}")
     else:
         result[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<lineCount: $i
     result.healthCheck(raiseException=true)
 
-proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], indexCol=""): DataFrame =
+proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], indexCol=""): StringDataFrame =
     ## 配列で表現されたデータ構造をDataFrameに変換する.
     runnableExamples:
         var df = toDataFrame(
@@ -169,7 +169,7 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
         )
     ##
 
-    result = initDataFrame()
+    result = initStringDataFrame()
     let colCount = max(
         collect(newSeq) do:
             for row in rows:
@@ -189,7 +189,7 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
                             dfEmpty
                     )
         else:
-            raise newException(NimDataFrameError, "each row.len must be lower than columns.len.")
+            raise newException(StringDataFrameError, "each row.len must be lower than columns.len.")
     #列名が指定されていない場合
     else:
         #列数は各行の長さの最大値
@@ -211,15 +211,15 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
         if result.columns.contains(indexCol):
             result.indexCol = indexCol
         else:
-            raise newException(NimDataFrameError, fmt"not found {indexCol}")
+            raise newException(StringDataFrameError, fmt"not found {indexCol}")
     else:
         result[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<rows.len: $i
         result.indexCol = defaultIndexName
 
-proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataFrame =
-    result = initDataFrame()
+proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): StringDataFrame =
+    result = initStringDataFrame()
     var c: seq[ColName] = @[]
     var l: seq[int] = @[]
     #代入
@@ -231,7 +231,7 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataF
         l.add(s.len)
     #長さチェック
     if toHashSet(l).len != 1:
-        raise newException(NimDataFrameError, "series must all be same length")
+        raise newException(StringDataFrameError, "series must all be same length")
     #インデックスの設定
     if c.contains(indexCol):
         result.indexCol = indexCol
@@ -242,10 +242,10 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): DataF
                     for i in 0..<l[0]: $i
             result.indexCol = defaultIndexName
         else:
-            raise newException(NimDataFrameError, fmt"not found {indexCol}")
+            raise newException(StringDataFrameError, fmt"not found {indexCol}")
 
 ###############################################################
-proc toCsv*(df: DataFrame): string =
+proc toCsv*(df: StringDataFrame): string =
     var lines: seq[string] = @[]
     var line: seq[string] = @[]
     for colName in df.columns:
@@ -264,23 +264,23 @@ proc toCsv*(df: DataFrame): string =
         lines.add(line.join(","))
     result = lines.join("\n")
 
-proc toCsv*(df: DataFrame, filename: string, encoding="utf-8") =
+proc toCsv*(df: StringDataFrame, filename: string, encoding="utf-8") =
     var fp: File
     let openOk = fp.open(filename, fmWrite)
     defer: fp.close()
     if not openOk:
-        raise newException(NimDataFrameError, fmt"{filename} open error.")
+        raise newException(StringDataFrameError, fmt"{filename} open error.")
     #
     let ec = open(encoding, "utf-8")
     defer: ec.close()
     fp.write(ec.convert(df.toCsv()))
 
-proc toCsv*(df: DataFrame, writableStrem: Stream, encoding="utf-8") =
+proc toCsv*(df: StringDataFrame, writableStrem: Stream, encoding="utf-8") =
     let ec = open(encoding, "utf-8")
     defer: ec.close()
     writableStrem.write(ec.convert(df.toCsv()))
 
-proc toFigure*(df: DataFrame, indexColSign=false): string =
+proc toFigure*(df: StringDataFrame, indexColSign=false): string =
     result = ""
     var columns =
         collect(newSeq):
@@ -331,7 +331,7 @@ proc toFigure*(df: DataFrame, indexColSign=false): string =
         #footerの設定
         result &= "+" & "-".repeat(fullWidth-1) & "+"
 
-proc show*(df: DataFrame, indexColSign=false, writableStrem: Stream = nil) =
+proc show*(df: StringDataFrame, indexColSign=false, writableStrem: Stream = nil) =
     var stream: Stream
     if writableStrem.isNil:
         stream = newFileStream(stdout)
