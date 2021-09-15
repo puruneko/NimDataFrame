@@ -84,7 +84,7 @@ proc toDataFrame*(
     #エンコード変換
     let ec = open("utf-8", encoding)
     defer: ec.close()
-    let textConverted = ec.convert(text.strip())
+    let textConverted = ec.convert(text).strip(chars={'\r','\n'})
     #テキストデータの変換
     let rowItr = genCsvRowIterator(textConverted, sep, headerRows)
     var lineCount = 0
@@ -127,7 +127,7 @@ proc toDataFrame*(
     #エンコード変換
     let ec = open("utf-8", encoding)
     defer: ec.close()
-    let textConverted = ec.convert(text.strip())
+    let textConverted = ec.convert(text).strip(chars={'\r','\n'})
     #ヘッダーの取得
     let rowItr = genCsvRowIterator(textConverted, sep)
     var headers: seq[string]
