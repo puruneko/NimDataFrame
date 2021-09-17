@@ -154,5 +154,6 @@ macro inspectType(df: typed): untyped =
 
 inspectType(df)
 
-for i in 10..10:
-    echo i
+var b1 = @[1,2,3]
+var b2 = @[1,2,3]
+echo b1 == b2

@@ -166,8 +166,12 @@ proc merge*(left: StringDataFrame, right: StringDataFrame, leftOn: openArray[Col
                     else:
                         raise newException(StringDataFrameError, "unknown error")
             #インデックスの設定
-            result.indexCol = mergeIndexName
-            result[mergeIndexName] = onColumn
+            if leftOn == rightOn:
+                result.indexCol = leftOn[0]
+                result[leftOn[0]] = onColumn
+            else:
+                result.indexCol = mergeIndexName
+                result[mergeIndexName] = onColumn
         else:
             var msg = ""
             if toHashSet(left.columns)*toHashSet(leftOn) == toHashSet(leftOn):
@@ -492,7 +496,7 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                 let datetimeId = m1
                 let w = m0.parseInt()
                 #インデックスがdatetimeフォーマットに準拠している場合
-                let datetimes = dfre.data[dfre.data.indexCol].toDatetime()
+                let datetimes = dfre.data[dfre.data.indexCol].toDatetime(dfre.data.datetimeFormat)
                 echo cpuTime() - tStart
                 let getInterval = genGetInterval(datetimeId)
                 let startDatetime = flattenDatetime(datetimes[0], datetimeId)
