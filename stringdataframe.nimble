@@ -1,17 +1,12 @@
 # Package
-name          = "stringdataframe"
+
 version       = "0.1.0"
 author        = "puruneko"
-description   = "dirty implementation data frame library for Nim"
+description   = "string-based data frame with a dirty implementation"
 license       = "MIT"
-
-srcDir = "src"
-binDir = "bin"
-skipDirs = "lab"
+srcDir        = "src"
+skipDirs      = @["benchmark","lab","testdata"]
 
 # Dependencies
-requires "nim >= 1.0.0"
 
-#task
-task test, "Run unit test":
-    exec "nim c -r test/unit.nim"
+requires "nim >= 1.4.8"
