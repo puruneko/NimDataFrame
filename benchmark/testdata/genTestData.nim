@@ -3,11 +3,11 @@ import random
 import times
 
 const N = 50000
+const nameKindNumber = 100
 
 proc getAlphabet(): string =
     $(sample("abcdefghijklmnopqrstuvwxyz"))
 
-const nameKindNumber = 100
 let names =
     collect(newSeq):
         for i in 0..<nameKindNumber:
@@ -17,7 +17,7 @@ let names =
             name
 
 var csv = "time,name,sales,dummy\n"
-var datetime = parse("2021-09-03 00:00:00", "yyyy-MM-dd HH:mm:ss")
+var datetime = parse("2021-09-01 00:00:00", "yyyy-MM-dd HH:mm:ss")
 for i in 0..<N:
     datetime = datetime + initDuration(minutes=rand(120))
     csv &= datetime.format("yyyy-MM-dd HH:mm:ss") & ","
@@ -26,7 +26,7 @@ for i in 0..<N:
     csv &= "\n"
 
 var fp: File
-let openOk = fp.open("./test/sample_data.csv", fmWrite)
+let openOk = fp.open("./benchmark/benchmarkData.csv", fmWrite)
 if openOk:
     fp.write(csv)
 fp.close()

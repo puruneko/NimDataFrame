@@ -10,7 +10,6 @@ import sets
 import encodings
 import re
 import streams
-import parsecsv
 
 import stringdataframe/typedef as typedef
 export typedef
@@ -63,8 +62,8 @@ proc genCsvRowIterator(csv: string, sep=',', skipRows=0): iterator =
 
 proc toDataFrame*(
     text: string,
-    sep=',',
     headers: openArray[ColName],
+    sep=',',
     headerRows= 0,
     indexCol="",
     encoding="utf-8"

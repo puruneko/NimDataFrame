@@ -157,3 +157,6 @@ inspectType(df)
 var b1 = @[1,2,3]
 var b2 = @[1,2,3]
 echo b1 == b2
+
+proc ff(a: openArray[openArray[int]]) =
+    echo a.repr

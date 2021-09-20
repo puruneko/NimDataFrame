@@ -46,7 +46,7 @@ proc toBe*() =
         proc echo3[T](a: varargs[T]) =
             echo(a)
 
-    const filename = "./test/sample.csv"
+    const filename = "./tests/testData.csv"
     var fp: File
     let openOk = fp.open(filename, fmRead)
     defer: fp.close()
@@ -71,7 +71,7 @@ proc toBe*() =
         df.show(true)
     #
     timeAttack("df huge"):
-        const filename_huge = "./test/sample_data.csv"
+        const filename_huge = "./benchmark/benchmarkData.csv"
         var fp_huge: File
         let openOk_huge = fp.open(filename_huge, fmRead)
         defer: fp_huge.close()
