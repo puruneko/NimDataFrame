@@ -77,8 +77,14 @@ proc toDataFrame*(
             headerRows=1,
         )
     ##
+
     result = initStringDataFrame()
     for colName in headers:
+        if colName == reservedColName:
+            raise newException(
+                    StringDataFrameReservedColNameError,
+                    fmt"{reservedColName} is library-reserved name"
+                )
         result.addColumn(colName)
     #エンコード変換
     let ec = open("utf-8", encoding)
@@ -122,6 +128,7 @@ proc toDataFrame*(
             headerRows=1,
         )
     ##
+
     result = initStringDataFrame()
     #エンコード変換
     let ec = open("utf-8", encoding)
@@ -132,6 +139,12 @@ proc toDataFrame*(
     var headers: seq[string]
     for i in 0..<headerLineNumber:
         headers = rowItr()
+    for colName in headers:
+        if colName == reservedColName:
+            raise newException(
+                    StringDataFrameReservedColNameError,
+                    fmt"{reservedColName} is library-reserved name"
+                )
     if not duplicatedHeader and (headers.len != toHashSet(headers).len):
         let dup =
             collect(newSeq):
@@ -191,6 +204,12 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
     ##
 
     result = initStringDataFrame()
+    for colName in colNames:
+        if colName == reservedColName:
+            raise newException(
+                    StringDataFrameReservedColNameError,
+                    fmt"{reservedColName} is library-reserved name"
+                )
     let colCount = max(
         collect(newSeq) do:
             for row in rows:
@@ -245,6 +264,11 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): Strin
     var l: seq[int] = @[]
     #代入
     for (colName, s) in columns:
+        if colName == reservedColName:
+            raise newException(
+                    StringDataFrameReservedColNameError,
+                    fmt"{reservedColName} is library-reserved name"
+                )
         result.addColumn(colName)
         for c in s.toString():
             result[colName].add(c)

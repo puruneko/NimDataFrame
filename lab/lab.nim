@@ -158,5 +158,17 @@ var b1 = @[1,2,3]
 var b2 = @[1,2,3]
 echo b1 == b2
 
-proc ff(a: openArray[openArray[int]]) =
-    echo a.repr
+var xxx: string
+echo xxx == ""
+
+tStart = cpuTime()
+var c1: seq[int] = @[]
+for i in 0..<100000:
+    c1.add(i)
+echo cpuTime() - tStart
+tStart = cpuTime()
+var c2 =
+    collect(newSeq):
+    for i in 0..<100000:
+        i
+echo cpuTime() - tStart

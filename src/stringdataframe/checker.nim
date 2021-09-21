@@ -10,9 +10,16 @@ proc healthCheck*(df: StringDataFrame, raiseException=false): bool{.discardable.
         if raiseException:
             raise newException(StringDataFrameError, fmt"not found index column '{df.indexCol}' in StringDataFrame")
         return false
-    #Seriesの長さチェック
+    #Seriesの長さチェックと予約列名チェック
     let length = df.len
     for colName in df.columns:
+        if colName == reservedColName:
+            if raiseException:
+                raise newException(
+                        StringDataFrameReservedColNameError,
+                        fmt"{reservedColName} is library-reserved name"
+                    )
+            return false
         if df[colName].len != length:
             if raiseException:
                 raise newException(StringDataFrameError, fmt"all series must be same length {length} (but '{colName}' is {df[colName].len})")

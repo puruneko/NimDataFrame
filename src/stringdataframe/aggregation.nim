@@ -83,6 +83,13 @@ proc merge*(left: StringDataFrame, right: StringDataFrame, leftOn: openArray[Col
     result = initStringDataFrame()
     #
     if ["inner","left","outer"].contains(how):
+        #
+        for colName in leftOn.toSeq()&rightOn.toSeq():
+            if colName == reservedColName:
+                raise newException(
+                        StringDataFrameReservedColNameError,
+                        fmt"{reservedColName} is library-reserved name"
+                    )
         #on列が存在する場合
         if toHashSet(left.columns)*toHashSet(leftOn) == toHashSet(leftOn) and
             toHashSet(right.columns)*toHashSet(rightOn) == toHashSet(rightOn):
@@ -226,6 +233,12 @@ proc groupby*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFram
     ## 
     
     result = initStringDataFrameGroupBy(df)
+    for colName in colNames:
+        if colName == reservedColName:
+            raise newException(
+                    StringDataFrameReservedColNameError,
+                    fmt"{reservedColName} is library-reserved name"
+                )
     #マルチインデックスの作成
     let multiIndex =
         collect(newSeq):

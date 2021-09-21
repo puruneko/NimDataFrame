@@ -2,6 +2,7 @@ import sugar
 import macros
 import strutils
 import sequtils
+import strformat
 import tables
 import times
 import algorithm
@@ -59,6 +60,11 @@ proc renameColumns*(df: StringDataFrame, renameMap: openArray[(ColName,ColName)]
 
     result = df
     for renamePair in renameMap:
+        if renamePair[1] == reservedColName:
+            raise newException(
+                    StringDataFrameReservedColNameError,
+                    fmt"{reservedColName} is library-reserved name"
+                )
         if result.columns.contains(renamePair[0]):
             result[renamePair[1]] = result[renamePair[0]]
             #インデックス列が書き換えられたときはインデックス情報を更新する
@@ -85,6 +91,8 @@ proc resetIndex*(df: StringDataFrame): StringDataFrame =
 
 proc setIndex*(df: StringDataFrame, indexCol: ColName, deletePredecessor=false): StringDataFrame =
     result = df
+    if not df.columns.contains(indexCol):
+        raise newException(StringDataFrameError, fmt"not found {indexCol}")
     if deletePredecessor:
         result = result.dropColumn(result.indexCol, forceDropIndex=true)
     result.indexCol = indexCol
@@ -152,13 +160,13 @@ proc cmpDec[T](x: (int,T), y: (int,T)): int =
     if x[1] < y[1]: 1
     elif x[1] == y[1]: 0
     else: -1
-proc sort*[T](df: StringDataFrame, colName: ColName = "", fromCell: Cell -> T, ascending=true): StringDataFrame =
+proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell: Cell -> T, ascending=true): StringDataFrame =
     ## DataFrameを指定列でソートする.
     ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する.
     ##
     result = initStringDataFrame(df)
     let cn =
-        if colName != "":
+        if colName != reservedColName:
             colName
         else:
             df.indexCol
@@ -180,7 +188,7 @@ proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCell: Cell 
     for colName in reversed(colNames):
         result = result.sort(colName, fromCell, ascending)
 
-proc sort*(df: StringDataFrame, colName: ColName = "", ascending=true): StringDataFrame =
+proc sort*(df: StringDataFrame, colName: ColName = reservedColName, ascending=true): StringDataFrame =
     let f = proc(c: Cell): Cell = c
     sort(df, colName, f, ascending)
 proc sort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
@@ -188,21 +196,21 @@ proc sort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): S
     for colName in reversed(colNames):
         result = result.sort(colName, ascending)
 
-proc intSort*(df: StringDataFrame, colName: ColName = "", ascending=true): StringDataFrame =
+proc intSort*(df: StringDataFrame, colName: ColName = reservedColName, ascending=true): StringDataFrame =
     sort(df, colName, parseInt, ascending)
 proc intSort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.intSort(colName, ascending)
 
-proc floatSort*(df: StringDataFrame, colName: ColName = "", ascending=true): StringDataFrame =
+proc floatSort*(df: StringDataFrame, colName: ColName = reservedColName, ascending=true): StringDataFrame =
     sort(df, colName, parseFloat, ascending)
 proc floatSort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
     result = df
     for colName in reversed(colNames):
         result = result.floatSort(colName, ascending)
 
-proc datetimeSort*(df: StringDataFrame, colName: ColName = "", format=defaultDatetimeFormat, ascending=true): StringDataFrame =
+proc datetimeSort*(df: StringDataFrame, colName: ColName = reservedColName, format=defaultDatetimeFormat, ascending=true): StringDataFrame =
     sort(df, colName, genParseDatetime(format), ascending)
 proc datetimeSort*(df: StringDataFrame, colNames: openArray[ColName], format=defaultDatetimeFormat, ascending=true): StringDataFrame =
     result = df
@@ -217,6 +225,12 @@ proc duplicated*(df: StringDataFrame, colNames: openArray[ColName] = []): Filter
     ##
     result = initFilterSeries()
     var columns = colNames.toSeq()
+    for colName in columns:
+        if colName == reservedColName:
+            raise newException(
+                    StringDataFrameReservedColNameError,
+                    fmt"{reservedColName} is library-reserved name"
+                )
     var checker = initTable[seq[string], bool]()
     if columns.len == 0:
         columns = @[df.indexCol]

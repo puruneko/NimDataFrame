@@ -298,6 +298,24 @@ proc toBe*() =
         )
         df2.show(true)
     #
+    timeAttack("dropColumns(1)"):
+        df2.dropColumns(["c","d"]).show(true)
+    #
+    timeAttack("dropColumns(2)"):
+        df2.dropColumn("a", forceDropIndex=true).setIndex("b").show(true)
+    #
+    timeAttack("dropColumns(3)"):
+        df2.dropColumn("a", newIndexCol="b").show(true)
+    #
+    timeAttack("keepColumns(1)"):
+        df2.keepColumns(["b","c"]).show(true)
+    #
+    timeAttack("keepColumns(2)"):
+        df2.keepColumns(["b","c"], forceDropIndex=true).setIndex("b").show(true)
+    #
+    timeAttack("keepColumns(3)"):
+        df2.keepColumns(["b","c"], newIndexCol="b").show(true)
+    #
     timeAttack("size"):
         echo3 df2.size()
         echo3 df2.size(true)
