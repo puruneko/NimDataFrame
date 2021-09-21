@@ -489,7 +489,7 @@ proc dropColumns*(df: StringDataFrame, colNames: openArray[ColName], forceDropIn
         for cn in result.columns[itr..high(result.columns)]:
             result.colTable[cn] -= 1
 
-proc dropColumns*(df: StringDataFrame, colName: ColName, forceDropIndex=false): StringDataFrame =
+proc dropColumn*(df: StringDataFrame, colName: ColName, forceDropIndex=false): StringDataFrame =
     df.dropColumns([colName], forceDropIndex)
 
 proc deleteColumns*(df: var StringDataFrame, colNames: openArray[ColName], forceDropIndex=false) =

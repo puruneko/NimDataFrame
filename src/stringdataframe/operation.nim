@@ -83,8 +83,10 @@ proc resetIndex*(df: StringDataFrame): StringDataFrame =
     let f = proc(i: int): Cell = $i
     result = df.resetIndex(f)
 
-proc setIndex*(df: StringDataFrame, indexCol: ColName): StringDataFrame =
+proc setIndex*(df: StringDataFrame, indexCol: ColName, deletePredecessor=false): StringDataFrame =
     result = df
+    if deletePredecessor:
+        result = result.dropColumn(result.indexCol, forceDropIndex=true)
     result.indexCol = indexCol
 
 

@@ -434,6 +434,10 @@ proc toBe*() =
     timeAttack("transpose"):
         df_j1.show(true)
         df_j1.transpose().show(true)
+    #
+    timeAttack("setIndex"):
+        df.setIndex("sales").show(true)
+        df.setIndex("sales", true).show(true)
     #[
     ]#
 
