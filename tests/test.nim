@@ -2,6 +2,8 @@ import unittest
 import sugar
 import tables
 import encodings
+import strutils
+import strformat
 
 import stringdataframe
 
@@ -13,9 +15,9 @@ const csv = """h1,h2,h3
 3,30,300
 """
 
-suite("toDataFrame(text指定、header指定)"):
+suite "toDataFrame(text指定、header指定)":
 
-    test("基本機能"):
+    test "(happyPath)基本機能":
         #do
         let df = toDataFrame(
             text=csv,
@@ -32,10 +34,9 @@ suite("toDataFrame(text指定、header指定)"):
         check df.columns == @["H1","H2","H3",defaultIndexName]
         check df.colTable == {"H1":0, "H2":1, "H3":2, defaultIndexName:3}.toTable()
         check df.indexCol == defaultIndexName
-        check df.columns == @["H1","H2","H3",defaultIndexName]
         check df.datetimeFormat == defaultDatetimeFormat
 
-    test("sepの指定(\\t)"):
+    test "(happyPath)sepの指定(\\t)":
         #setup
         var tsv = "h1\th2\th3\n"
         tsv &= "1\t10\t100\n"
@@ -58,10 +59,9 @@ suite("toDataFrame(text指定、header指定)"):
         check df.columns == @["H1","H2","H3",defaultIndexName]
         check df.colTable == {"H1":0, "H2":1, "H3":2, defaultIndexName:3}.toTable()
         check df.indexCol == defaultIndexName
-        check df.columns == @["H1","H2","H3",defaultIndexName]
         check df.datetimeFormat == defaultDatetimeFormat
 
-    test("indexColの指定"):
+    test "(happyPath)indexColの指定":
         #setup
         let indexCol = "H1"
         #do
@@ -80,10 +80,9 @@ suite("toDataFrame(text指定、header指定)"):
         check df.columns == @["H1","H2","H3"]
         check df.colTable == {"H1":0, "H2":1, "H3":2}.toTable()
         check df.indexCol == indexCol
-        check df.columns == @["H1","H2","H3"]
         check df.datetimeFormat == defaultDatetimeFormat
     
-    test("encodingの指定"):
+    test "(happyPath)encodingの指定":
         #setup
         let encoding = "shift-jis"
         let ec = open(encoding, "utf-8")
@@ -106,10 +105,9 @@ suite("toDataFrame(text指定、header指定)"):
         check df.columns == @["H1","H2","H3",defaultIndexName]
         check df.colTable == {"H1":0, "H2":1, "H3":2, defaultIndexName:3}.toTable()
         check df.indexCol == defaultIndexName
-        check df.columns == @["H1","H2","H3",defaultIndexName]
         check df.datetimeFormat == defaultDatetimeFormat
     
-    test("header不一致"):
+    test "(exception)header不一致":
         #do
         expect StringDataFrameError:
             discard toDataFrame(
@@ -118,7 +116,7 @@ suite("toDataFrame(text指定、header指定)"):
                 headerRows=1,
             )
     
-    test("indexColに存在しない列を指定"):
+    test "(exception)indexColに存在しない列を指定":
         #do
         expect StringDataFrameError:
             discard toDataFrame(
@@ -128,9 +126,9 @@ suite("toDataFrame(text指定、header指定)"):
                 indexCol="H4"
             )
 
-suite("toDataFrame(text指定、header検知)"):
+suite "toDataFrame(text指定、header検知)":
 
-    test("基本機能"):
+    test "(happyPath)基本機能":
         #do
         let df = toDataFrame(
             text=csv,
@@ -145,10 +143,9 @@ suite("toDataFrame(text指定、header検知)"):
         check df.columns == @["h1","h2","h3",defaultIndexName]
         check df.colTable == {"h1":0, "h2":1, "h3":2, defaultIndexName:3}.toTable()
         check df.indexCol == defaultIndexName
-        check df.columns == @["h1","h2","h3",defaultIndexName]
         check df.datetimeFormat == defaultDatetimeFormat
     
-    test("headerLineNumberの指定"):
+    test "(happyPath)headerLineNumberの指定":
         #do
         let df = toDataFrame(
             text=csv,
@@ -164,10 +161,9 @@ suite("toDataFrame(text指定、header検知)"):
         check df.columns == @["1","10","100",defaultIndexName]
         check df.colTable == {"1":0, "10":1, "100":2, defaultIndexName:3}.toTable()
         check df.indexCol == defaultIndexName
-        check df.columns == @["1","10","100",defaultIndexName]
         check df.datetimeFormat == defaultDatetimeFormat
     
-    test("duplicatedHeaderの指定"):
+    test "(happyPath)duplicatedHeaderの指定":
         #setup
         var csv2 = "dup,dup2,dup,dup2\n"
         csv2 &= "1,2,3,4\n"
@@ -188,10 +184,9 @@ suite("toDataFrame(text指定、header検知)"):
         check df.columns == @["dup_0","dup2_0","dup_1","dup2_1",defaultIndexName]
         check df.colTable == {"dup_0":0,"dup2_0":1,"dup_1":2,"dup2_1":3,defaultIndexName:4}.toTable()
         check df.indexCol == defaultIndexName
-        check df.columns == @["dup_0","dup2_0","dup_1","dup2_1",defaultIndexName]
         check df.datetimeFormat == defaultDatetimeFormat
     
-    test("indexColの指定"):
+    test "(happyPath)indexColの指定":
         #setup
         let indexCol = "h1"
         #do
@@ -208,10 +203,9 @@ suite("toDataFrame(text指定、header検知)"):
         check df.columns == @["h1","h2","h3"]
         check df.colTable == {"h1":0, "h2":1, "h3":2}.toTable()
         check df.indexCol == indexCol
-        check df.columns == @["h1","h2","h3"]
         check df.datetimeFormat == defaultDatetimeFormat
     
-    test("duplicatedHeaderをtrueにしない状態で重複した列名を指定"):
+    test "(exception)duplicatedHeaderをtrueにしない状態で重複した列名を指定":
         #setup
         var csv2 = "dup,dup2,dup,dup2\n"
         csv2 &= "1,2,3,4\n"
@@ -222,8 +216,153 @@ suite("toDataFrame(text指定、header検知)"):
                 text=csv2,
             )
 
-suite("toDataFrame(array指定)"):
+suite "toDataFrame(各行のデータ指定)":
 
-    test("基本機能"):
-        discard
-    test("")
+    test "(happyPath)基本機能":
+        #do
+        var df = toDataFrame(
+            [
+                @[1,2,3,4],
+                @[5,6,7],
+                @[8,9],
+            ],
+            colNames=["col1","col2","col3","col4"],
+        )
+        #check
+        check df.data == @[
+            @["1","5","8"],
+            @["2","6","9"],
+            @["3","7",""],
+            @["4","",""],
+            @["0","1","2"],#auto index
+        ]
+        check df.columns == @["col1","col2","col3","col4",defaultIndexName]
+        check df.colTable == {"col1":0,"col2":1,"col3":2,"col4":3,defaultIndexName:4}.toTable()
+        check df.indexCol == defaultIndexName
+        check df.datetimeFormat == defaultDatetimeFormat
+
+    test "(happyPath)indexColの指定":
+        #do
+        var df = toDataFrame(
+            [
+                @[1,2,3,4],
+                @[5,6,7],
+                @[8,9],
+            ],
+            colNames=["col1","col2","col3","col4"],
+            indexCol="col1"
+        )
+        #check
+        check df.data == @[
+            @["1","5","8"],
+            @["2","6","9"],
+            @["3","7",""],
+            @["4","",""],
+        ]
+        check df.columns == @["col1","col2","col3","col4"]
+        check df.colTable == {"col1":0,"col2":1,"col3":2,"col4":3}.toTable()
+        check df.indexCol == "col1"
+        check df.datetimeFormat == defaultDatetimeFormat
+
+    test "(exception)列名数 < データの長さ":
+        expect StringDataFrameError:
+            discard toDataFrame(
+                [
+                    @[1,1,1,1,1],
+                ],
+                colNames=["col1","col2","col3","col4"],
+            )
+
+    test "(exception)存在しない列名をインデックス列名に指定":
+        expect StringDataFrameError:
+            discard toDataFrame(
+                [
+                    @[1,2,3,4],
+                    @[5,6,7],
+                    @[8,9],
+                ],
+                colNames=["col1","col2","col3","col4"],
+                indexCol="col999"
+            )
+
+suite "toDataFrame(各列のデータ指定)":
+
+    test "(happyPath)基本機能":
+        #do
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[3,4],
+            },
+            indexCol = "col1",
+        )
+        #check
+        check df.data == @[
+            @["1","2"],
+            @["3","4"],
+        ]
+        check df.columns == @["col1","col2"]
+        check df.colTable == {"col1":0,"col2":1}.toTable()
+        check df.indexCol == "col1"
+        check df.datetimeFormat == defaultDatetimeFormat
+    
+    test "(exception)各列のデータ長が不揃い":
+        expect StringDataFrameError:
+            discard toDataFrame(
+                {
+                    "col1": @[1,2],
+                    "col2": @[3,4,5],
+                },
+            )
+
+suite "toCsv(return string)":
+
+    test "(happyPath)基本機能":
+        #do
+        let df = toDataFrame(
+            text=csv,
+            indexCol="h1",
+        )
+        let fromDf = df.toCsv()
+        #check
+        check fromDf == csv.strip()
+
+suite "toCsv(to file)":
+
+    setup:
+        #setup
+        let filepath = "./tests/output/toCsv.csv"
+        let df = toDataFrame(
+            text=csv,
+            indexCol="h1",
+        )
+
+    test "(happyPath)基本機能":
+        #do
+        df.toCsv(filepath)
+        #check
+        var fp: File
+        let openOk = fp.open(filepath, fmRead)
+        defer: fp.close()
+        if openOk:
+            check fp.readAll() == csv.strip()
+        else:
+            checkpoint(fmt"open failed {filepath}")
+            fail()
+    
+    test "(happyPath)エンコード設定":
+        #setup
+        let encoding = "shift-jis"
+        #do
+        df.toCsv(filepath, encoding=encoding)
+        #check
+        var fp: File
+        let openOk = fp.open(filepath, fmRead)
+        defer: fp.close()
+        if openOk:
+            let ec = open("utf-8", encoding)
+            defer: ec.close()
+            check ec.convert(fp.readAll()) == csv.strip()
+        else:
+            checkpoint(fmt"open failed {filepath}")
+            fail()

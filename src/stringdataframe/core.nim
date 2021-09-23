@@ -76,17 +76,28 @@ proc `[]=`*[T](df: var StringDataFrame, colName: ColName, right: openArray[T]) =
             )
     if not df.columns.contains(colName):
         df.addColumn(colName)
-    df[df.colTable[colName]] = right
+    when typeof(T) is string:
+        df[df.colTable[colName]] = right.toSeq()
+    else:
+        df[df.colTable[colName]] = right.toString()
 
+proc len*(df: StringDataFrame): int =
+    ## DataFrameの長さを返す
+    ## no healthCheck
+    result = df[df.indexCol].len
+
+#[
 proc addColumn*(df: var StringDataFrame, colName: ColName, s: Series) =
     if colName == reservedColName:
         raise newException(
                 StringDataFrameReservedColNameError,
                 fmt"{reservedColName} is library-reserved name"
             )
+    if s.len != df.len:
+        raise newException(StringDataFrameError, "all columns must be the same length")
     df.addColumn(colName)
     df[colName] = s
-
+]#
 
 iterator rows*(df: StringDataFrame): Row =
     let maxRowNumber = min(
@@ -174,36 +185,44 @@ proc initStringDataFrameGroupBy*(df: StringDataFrame): StringDataFrameGroupBy =
     result.multiIndexTable = initTable[seq[ColName],int]()
     result.columns = @[]
 
-
-proc len*(df: StringDataFrame): int =
-    ## DataFrameの長さを返す
-    ## no healthCheck
-    result = df[df.indexCol].len
-
+#[
 proc deepCopy*(df: StringDataFrame): StringDataFrame =
     result = initStringDataFrame(df)
     for i in 0..<df.len:
         for colIndex, colName in df.columns.pairs():
             result[colName].add(df[colIndex][i])
+]#
 
 proc `[]`*(df: StringDataFrame, colNames: openArray[ColName]): StringDataFrame =
     ## 指定した列だけ返す.
     result = initStringDataFrame()
-    for colName in colNames:
-        if not df.columns.contains(colName):
-            raise newException(StringDataFrameError, fmt"df doesn't have column {colName}")
-        result[colName] = df[colName]
-    result[df.indexCol] = df[df.indexCol]
+    let keepColumns = toHashSet(colNames.toSeq() & @[df.indexCol])
+    if (keepColumns - toHashSet(df.columns)).len != 0:
+        raise newException(StringDataFrameError, fmt"df doesn't have columns {keepColumns - toHashSet(df.columns)}")
+    for colName in df.columns:
+        if keepColumns.contains(colName):
+            result[colName] = df[colName]
+    result.indexCol = df.indexCol
+    result.datetimeFormat = df.datetimeFormat
 
 proc keep*(df: StringDataFrame, fs: FilterSeries): StringDataFrame =
     ## trueをkeepする（fsがtrueの行だけ返す）.
+    ##
+
+    if fs.len != df.len:
+        raise newException(StringDataFrameError, fmt"filter series must be the same length of data frame")
     result = initStringDataFrame(df)
     for colIndex, colName in df.columns.pairs():
         for i, b in fs.pairs():
             if b:
                 result[colIndex].add(df[colIndex][i])
+
 proc drop*(df: StringDataFrame, fs: FilterSeries): StringDataFrame =
     ## trueをdropする（fsがtrueの行を落として返す）（fsがfalseの行だけ返す）.
+    ## 
+    
+    if fs.len != df.len:
+        raise newException(StringDataFrameError, fmt"filter series must be the same length of data frame")
     result = initStringDataFrame(df)
     for colIndex, colName in df.columns.pairs():
         for i, b in fs.pairs():
@@ -248,12 +267,13 @@ proc loc*(df: StringDataFrame, c: Cell): StringDataFrame =
             for colIndex, colName in df.columns.pairs():
                 result[colIndex].add(df[colIndex][i])
 
-proc head*(df: StringDataFrame, num: int): StringDataFrame =
+proc head*(df: StringDataFrame, num=5): StringDataFrame =
     result = initStringDataFrame(df)
     for i in 0..<min(num,df.len):
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][i])
-proc tail*(df: StringDataFrame, num: int): StringDataFrame =
+
+proc tail*(df: StringDataFrame, num=5): StringDataFrame =
     result = initStringDataFrame(df)
     for i in df.len-min(num,df.len)..<df.len:
         for colIndex, colName in df.columns.pairs():
@@ -277,6 +297,21 @@ proc size*(df: StringDataFrame, excludeIndex=false): int =
 
 
 proc appendRow*(df: StringDataFrame, row: Row, autoIndex=false, fillEmpty=false): StringDataFrame =
+    ##
+    runnableExamples:
+        var df = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col1",
+        )
+        var r: Row = initRow()
+        r["col1"] = "2"
+        r["col2"] = "20"
+        df = df.appendRow(r)
+    ##
+
     result = df
     var columns: seq[ColName] = @[]
     for colName in row.keys:

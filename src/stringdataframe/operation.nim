@@ -184,7 +184,7 @@ proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell:
             result[colIndex].add(df[colIndex][sorted[0]])
 
 proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): StringDataFrame =
-    result = df.deepCopy()
+    result = initStringDataFrame(df, copy=true)
     for colName in reversed(colNames):
         result = result.sort(colName, fromCell, ascending)
 
@@ -192,7 +192,7 @@ proc sort*(df: StringDataFrame, colName: ColName = reservedColName, ascending=tr
     let f = proc(c: Cell): Cell = c
     sort(df, colName, f, ascending)
 proc sort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
-    result = df.deepCopy()
+    result = initStringDataFrame(df, copy=true)
     for colName in reversed(colNames):
         result = result.sort(colName, ascending)
 

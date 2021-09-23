@@ -229,7 +229,7 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
                             dfEmpty
                     )
         else:
-            raise newException(StringDataFrameError, "each row.len must be lower than columns.len.")
+            raise newException(StringDataFrameError, "each row.len must be less than columns.len.")
     #列名が指定されていない場合
     else:
         #列数は各行の長さの最大値
@@ -259,6 +259,17 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
         result.indexCol = defaultIndexName
 
 proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): StringDataFrame =
+    ##
+    runnableExamples:
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[3,4],
+            },
+            indexCol = "col1",
+        )
+    ##
+
     result = initStringDataFrame()
     var c: seq[ColName] = @[]
     var l: seq[int] = @[]
@@ -291,6 +302,8 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): Strin
 
 ###############################################################
 proc toCsv*(df: StringDataFrame): string =
+    df.healthCheck(raiseException=true)
+
     var lines: seq[string] = @[]
     var line: seq[string] = @[]
     for colName in df.columns:
@@ -326,6 +339,8 @@ proc toCsv*(df: StringDataFrame, writableStrem: Stream, encoding="utf-8") =
     writableStrem.write(ec.convert(df.toCsv()))
 
 proc toFigure*(df: StringDataFrame, indexColSign=false): string =
+    df.healthCheck(raiseException=true)
+
     result = ""
     var columns =
         collect(newSeq):
