@@ -446,13 +446,13 @@ proc flattenDatetime*(dt: DateTime, datetimeId: string): DateTime =
     result = dt
     case datetimeId:
     of "Y":
-        result -= result.month.ord.months
-        result -= result.monthday.ord.days
+        result -= (result.month.ord.months - 1.months)
+        result -= (result.monthday.ord.days - 1.days)
         result -= result.hour.ord.hours
         result -= result.minute.ord.minutes
         result -= result.second.ord.seconds
     of "m":
-        result -= result.monthday.ord.days
+        result -= (result.monthday.ord.days - 1.days)
         result -= result.hour.ord.hours
         result -= result.minute.ord.minutes
         result -= result.second.ord.seconds
