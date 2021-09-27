@@ -65,8 +65,9 @@ proc toDataFrame*(
     headers: openArray[ColName],
     sep=',',
     headerRows= 0,
+    encoding="utf-8",
     indexCol="",
-    encoding="utf-8"
+    datetimeFormat="",
 ): StringDataFrame =
     ## テキストで表現されたデータ構造をDataFrameに変換する.
     runnableExamples:
@@ -109,6 +110,10 @@ proc toDataFrame*(
         result[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<lineCount: $i
+    #datetimeformatの設定
+    if datetimeFormat != "":
+        result.datetimeFormat = datetimeFormat
+    #
     result.healthCheck(raiseException=true)
 
 proc toDataFrame*(
@@ -116,8 +121,9 @@ proc toDataFrame*(
     sep=',',
     headerLineNumber=1,
     duplicatedHeader=false,
+    encoding="utf-8",
     indexCol="",
-    encoding="utf-8"
+    datetimeFormat="",
 ): StringDataFrame =
     ## テキストで表現されたデータ構造をDataFrameに変換する.
     runnableExamples:
@@ -186,9 +192,18 @@ proc toDataFrame*(
         result[defaultIndexName] =
             collect(newSeq):
                 for i in 0..<lineCount: $i
+    #datetimeformatの設定
+    if datetimeFormat != "":
+        result.datetimeFormat = datetimeFormat
+    #
     result.healthCheck(raiseException=true)
 
-proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [], indexCol=""): StringDataFrame =
+proc toDataFrame*[T](
+    rows: openArray[seq[T]],
+    colNames: openArray[ColName] = [],
+    indexCol="",
+    datetimeFormat="",
+): StringDataFrame =
     ## 配列で表現されたデータ構造をDataFrameに変換する.
     runnableExamples:
         var df = toDataFrame(
@@ -257,8 +272,17 @@ proc toDataFrame*[T](rows: openArray[seq[T]], colNames: openArray[ColName] = [],
             collect(newSeq):
                 for i in 0..<rows.len: $i
         result.indexCol = defaultIndexName
+    #datetimeformatの設定
+    if datetimeFormat != "":
+        result.datetimeFormat = datetimeFormat
+    #
+    result.healthCheck(raiseException=true)
 
-proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): StringDataFrame =
+proc toDataFrame*[T](
+    columns: openArray[(ColName, seq[T])],
+    indexCol="",
+    datetimeFormat="",
+): StringDataFrame =
     ##
     runnableExamples:
         var df = toDataFrame(
@@ -276,9 +300,7 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): Strin
     #代入
     for (colName, s) in columns:
         if colName == reservedColName:
-            raise newException(
-                    StringDataFrameReservedColNameError,
-                    fmt"{reservedColName} is library-reserved name"
+            raise newException(StringDataFrameReservedColNameError,fmt"{reservedColName} is library-reserved name"
                 )
         result.addColumn(colName)
         for c in s.toString():
@@ -299,6 +321,11 @@ proc toDataFrame*[T](columns: openArray[(ColName, seq[T])], indexCol="" ): Strin
             result.indexCol = defaultIndexName
         else:
             raise newException(StringDataFrameError, fmt"not found {indexCol}")
+    #datetimeformatの設定
+    if datetimeFormat != "":
+        result.datetimeFormat = datetimeFormat
+    #
+    result.healthCheck(raiseException=true)
 
 ###############################################################
 proc toCsv*(df: StringDataFrame): string =

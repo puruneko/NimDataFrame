@@ -9,6 +9,106 @@ import StringDataFrame
 
 echo "\n----------test_core----------"
 
+suite "df==df, df!=df, df===df, df!==df":
+
+    test "(happyPath)df==df:基本機能":
+        #setup
+        let a = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            }
+        )
+        let b = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+        )
+        #check
+        check a == b
+    
+    test "(happyPath)df==df:datetimeFormatが異なる":
+        #setup
+        let a = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col1",
+            datetimeFormat="yyyy/mm/dd HH:MM:SS",
+        )
+        let b = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col1"
+        )
+        #check
+        check a == b
+    
+    test "(happyPath)df!=df:基本機能":
+        #setup
+        let a = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col1",
+            datetimeFormat="yyyy/mm/dd HH:MM:SS",
+        )
+        let b = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col2"
+        )
+        #check
+        check a != b
+        
+    test "(happyPath)df===df:基本機能":
+        #setup
+        let a = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col1",
+            datetimeFormat="yyyy/mm/dd HH:MM:SS",
+        )
+        let b = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col1",
+            datetimeFormat="yyyy/mm/dd HH:MM:SS",
+        )
+        #check
+        check a === b
+        
+    test "(happyPath)df!==df:基本機能":
+        #setup
+        let a = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col1",
+            datetimeFormat="yyyy/mm/dd HH:MM:SS",
+        )
+        let b = toDataFrame(
+            {
+                "col1": @[1],
+                "col2": @[10],
+            },
+            indexCol="col1",
+        )
+        #check
+        check a !== b
+
 suite "[](colName指定)":
     
     test "(happyPath)基本機能":
@@ -241,6 +341,20 @@ suite "to":
     
     test "(happyPath)toDatetime":
         check @["2021/09/01","2021/09/02","2021/09/03"].toDatetime("yyyy/MM/dd") == @[initDateTime(1, mSep, 2021, 00, 00, 00, 00),initDateTime(2, mSep, 2021, 00, 00, 00, 00),initDateTime(3, mSep, 2021, 00, 00, 00, 00)]
+
+suite "initRow(cells)":
+
+    test "(happyPath)基本機能":
+        #do
+        let row = initRow(
+            {
+                "col1": "1",
+                "col2": "2",
+            }
+        )
+        #check
+        check row == {"col1":"1","col2":"2"}.toTable()
+
 suite "initStringDataFrame(空)":
     
     test "(happyPath)基本機能":
@@ -362,7 +476,7 @@ suite "[](複数colName指定)":
             indexCol="col1",
         )
 
-    test "(exception)存在しない列の指定":
+    test "(exceptionPath)存在しない列の指定":
         #setup
         var df = toDataFrame(
             {
@@ -398,7 +512,7 @@ suite "keep":
             indexCol="col1",
         )
     
-    test "(exception)不正な長さのfilterSeries":
+    test "(exceptionPath)不正な長さのfilterSeries":
         #setup
         var df = toDataFrame(
             {
@@ -434,7 +548,7 @@ suite "drop":
             indexCol="col1",
         )
     
-    test "(exception)不正な長さのfilterSeries":
+    test "(exceptionPath)不正な長さのfilterSeries":
         #setup
         var df = toDataFrame(
             {
@@ -614,29 +728,723 @@ suite "size":
         #check
         check df.size(excludeIndex=true) == 10
 
-suite "appendRow":
-    discard
-suite "addRow":
-    discard
 suite "appendRows":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.appendRows(
+            {
+                "col1": @[3,4],
+                "col2": @[30,40],
+            }
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @[1,2,3,4],
+                "col2": @[10,20,30,40],
+            },
+            indexCol="col1",
+        )
+    
+    test "(happyPath)autoIndexの設定":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+        )
+        #do
+        let newDf = df.appendRows(
+            {
+                "col1": @[3,4],
+                "col2": @[30,40],
+            },
+            autoIndex=true
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @[1,2,3,4],
+                "col2": @[10,20,30,40],
+            },
+        )
+    
+    test "(happyPath)fillEmptyRowの設定":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.appendRows(
+            {
+                "col1": @[3,4],
+                "col2": @[30],
+            },
+            fillEmptyRow=true
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["1","2","3","4"],
+                "col2": @["10","20","30",dfEmpty],
+            },
+            indexCol="col1",
+        )
+
+    test "(happyPath)fillEmptyColの設定":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.appendRows(
+            {
+                "col1": @[3,4],
+            },
+            fillEmptyCol=true
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["1","2","3","4"],
+                "col2": @["10","20",dfEmpty,dfEmpty],
+            },
+            indexCol="col1",
+        )
+    
+    test "(exceptionPath)列の長さの不一致":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        expect StringDataFrameError:
+            discard df.appendRows(
+                {
+                    "col1": @[3,4],
+                    "col2": @[30]
+                },
+            )
+
+    test "(exceptionPath)存在しない列の指定":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        expect StringDataFrameError:
+            discard df.appendRows(
+                {
+                    "col3": @[100,200],
+                },
+            )
+        expect StringDataFrameError:
+            discard df.appendRows(
+                {
+                    "col3": @[100,200],
+                },
+                fillEmptyCol=true,
+            )
+
 suite "addRows":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        df.addRows(
+            {
+                "col1": @[3,4],
+                "col2": @[30,40],
+            }
+        )
+        #check
+        check df == toDataFrame(
+            {
+                "col1": @[1,2,3,4],
+                "col2": @[10,20,30,40],
+            },
+            indexCol="col1",
+        )
+
+suite "appendRow":
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.appendRow(
+            {
+                "col1": 3,
+                "col2": 30,
+            }
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @[1,2,3],
+                "col2": @[10,20,30],
+            },
+            indexCol="col1",
+        )
+
+suite "addRow":
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        df.addRow(
+            {
+                "col1": 3,
+                "col2": 30,
+            }
+        )
+        #check
+        check df == toDataFrame(
+            {
+                "col1": @[1,2,3],
+                "col2": @[10,20,30],
+            },
+            indexCol="col1",
+        )
+
 suite "appendColumns":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.appendColumns(
+            {
+                "col3": @[100,200],
+            }
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200]
+            },
+            indexCol="col1",
+        )
+
+    test "(happyPath)fillEmpty":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.appendColumns(
+            {
+                "col3": @[100],
+            },
+            fillEmpty=true,
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["1","2"],
+                "col2": @["10","20"],
+                "col3": @["100",dfEmpty]
+            },
+            indexCol="col1",
+        )
+
+    test "(happyPath)override":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.appendColumns(
+            {
+                "col2": @[30,40],
+            },
+            override=true,
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["1","2"],
+                "col2": @["30","40"],
+            },
+            indexCol="col1",
+        )
+
+    test "(happyPath)fillEmpty & override":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.appendColumns(
+            {
+                "col2": @[30,40],
+                "col3": @[100,200]
+            },
+            fillEmpty=true,
+            override=true,
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["1","2"],
+                "col2": @["30","40"],
+                "col3": @["100","200"],
+            },
+            indexCol="col1",
+        )
+
+    test "(exceptionPath)列の長さの不一致":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #check
+        expect StringDataFrameError:
+            discard df.appendColumns(
+                {
+                    "col3": @[100],
+                }
+            )
+        
+    test "(exceptionPath)fillEmpty指定で列の長さがdf以上":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #check
+        expect StringDataFrameError:
+            discard df.appendColumns(
+                {
+                    "col3": @[100,200,300],
+                }
+            )
+    
+    test "(exceptionPath)override指定なしで存在する列を指定":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #check
+        expect StringDataFrameError:
+            discard df.appendColumns(
+                {
+                    "col2": @[10,20],
+                }
+            )
+
 suite "addColumns":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+        #do
+        df.addColumns(
+            {
+                "col3": @[100,200],
+            }
+        )
+        #check
+        check df == toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1"
+        )
+
 suite "dropColumns":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.dropColumns(
+            ["col2","col3"],
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @[1,2],
+            },
+            indexCol="col1",
+        )
+    
+    test "(happyPath)newIndexColの指定":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.dropColumns(
+            ["col1","col2"],
+            newIndexCol="col3",
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col3": @[100,200],
+            },
+            indexCol="col3",
+        )
+    
+    test "(happyPath)forceDropIndexの指定":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.dropColumns(
+            ["col1","col2"],
+            forceDropIndex=true,
+        )
+        #check
+        check newDf.data == @[@["100","200"]]
+        check newDf.columns == @["col3"]
+        check newDf.colTable == {"col3":0}.toTable()
+        check newDf.indexCol == df.indexCol
+        check newDf.datetimeFormat == df.datetimeFormat
+    
+    test "(exceptionPath)indexCol列を削除しようとする":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #check
+        expect StringDataFrameError:
+            discard df.dropColumns(
+                ["col1"],
+            )
+        
+    test "(exceptionPath)存在しない列を指定する":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #check
+        expect StringDataFrameError:
+            discard df.dropColumns(
+                ["col4"],
+            )
+
 suite "dropColumn":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.dropColumn("col3")
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+
 suite "deleteColumns":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        df.deleteColumns(["col2","col3"])
+        #check
+        check df == toDataFrame(
+            {
+                "col1": @[1,2],
+            },
+            indexCol="col1",
+        )
+
 suite "deleteColumn":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        df.deleteColumn("col3")
+        #check
+        check df == toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+
 suite "keepColumns":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.keepColumns(
+            ["col1","col2"]
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+            },
+            indexCol="col1",
+        )
+    
+    test "(happyPath)newIndexCol":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.keepColumns(
+            ["col2","col3"],
+            newIndexCol="col2"
+        )
+        #check
+        check newDf == toDataFrame(
+            {
+                "col2": @[10,20],
+                "col3": @[100,200]
+            },
+            indexCol="col2",
+        )
+    
+    test "(happyPath)forceDropIndex":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.keepColumns(
+            ["col2","col3"],
+            forceDropIndex=true,
+        )
+        #check
+        check newDf.data == @[
+            @["10","20"],
+            @["100","200"],
+        ]
+        check newDf.columns == @["col2","col3"]
+        check newDf.colTable == {"col2":0,"col3":1}.toTable()
+        check newDf.indexCol == df.indexCol
+        check newDf.datetimeFormat == df.datetimeFormat
+
 suite "keepColumn":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.keepColumn("col1")
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @[1,2],
+            },
+            indexCol="col1",
+        )
+    
 suite "serviveColumns":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        df.surviveColumns(
+            ["col1","col2"]
+        )
+        #check
+        check df == toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20]
+            },
+            indexCol="col1",
+        )
+
+suite "serviveColumn":
+    
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[10,20],
+                "col3": @[100,200],
+            },
+            indexCol="col1",
+        )
+        #do
+        df.surviveColumn("col1")
+        #check
+        check df == toDataFrame(
+            {
+                "col1": @[1,2],
+            },
+            indexCol="col1",
+        )

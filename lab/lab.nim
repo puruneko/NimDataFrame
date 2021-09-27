@@ -172,3 +172,5 @@ var c2 =
     for i in 0..<100000:
         i
 echo cpuTime() - tStart
+
+echo toHashSet([1,2,3])-toHashSet([1,2,3,4])

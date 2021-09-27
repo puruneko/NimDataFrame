@@ -61,27 +61,6 @@ suite "toDataFrame(text指定、header指定)":
         check df.indexCol == defaultIndexName
         check df.datetimeFormat == defaultDatetimeFormat
 
-    test "(happyPath)indexColの指定":
-        #setup
-        let indexCol = "H1"
-        #do
-        let df = toDataFrame(
-            text=csv,
-            headers=["H1","H2","H3"],
-            headerRows=1,
-            indexCol=indexCol,
-        )
-        #check
-        check df.data == @[
-            @["1","2","3"],
-            @["10","20","30"],
-            @["100","200","300"],
-        ]
-        check df.columns == @["H1","H2","H3"]
-        check df.colTable == {"H1":0, "H2":1, "H3":2}.toTable()
-        check df.indexCol == indexCol
-        check df.datetimeFormat == defaultDatetimeFormat
-    
     test "(happyPath)encodingの指定":
         #setup
         let encoding = "shift-jis"
@@ -106,8 +85,52 @@ suite "toDataFrame(text指定、header指定)":
         check df.colTable == {"H1":0, "H2":1, "H3":2, defaultIndexName:3}.toTable()
         check df.indexCol == defaultIndexName
         check df.datetimeFormat == defaultDatetimeFormat
-    
-    test "(exception)header不一致":
+
+    test "(happyPath)indexColの指定":
+        #setup
+        let indexCol = "H1"
+        #do
+        let df = toDataFrame(
+            text=csv,
+            headers=["H1","H2","H3"],
+            headerRows=1,
+            indexCol=indexCol,
+        )
+        #check
+        check df.data == @[
+            @["1","2","3"],
+            @["10","20","30"],
+            @["100","200","300"],
+        ]
+        check df.columns == @["H1","H2","H3"]
+        check df.colTable == {"H1":0, "H2":1, "H3":2}.toTable()
+        check df.indexCol == indexCol
+        check df.datetimeFormat == defaultDatetimeFormat
+
+    test "(happyPath)datetimeFormatの指定":
+        #setup
+        let indexCol = "H1"
+        let f = "yyyy/MM/dd HH:mm:SS"
+        #do
+        let df = toDataFrame(
+            text=csv,
+            headers=["H1","H2","H3"],
+            headerRows=1,
+            indexCol=indexCol,
+            datetimeFormat=f,
+        )
+        #check
+        check df.data == @[
+            @["1","2","3"],
+            @["10","20","30"],
+            @["100","200","300"],
+        ]
+        check df.columns == @["H1","H2","H3"]
+        check df.colTable == {"H1":0, "H2":1, "H3":2}.toTable()
+        check df.indexCol == indexCol
+        check df.datetimeFormat == f
+
+    test "(exceptionPath)header不一致":
         #do
         expect StringDataFrameError:
             discard toDataFrame(
@@ -116,7 +139,7 @@ suite "toDataFrame(text指定、header指定)":
                 headerRows=1,
             )
     
-    test "(exception)indexColに存在しない列を指定":
+    test "(exceptionPath)indexColに存在しない列を指定":
         #do
         expect StringDataFrameError:
             discard toDataFrame(
@@ -204,8 +227,29 @@ suite "toDataFrame(text指定、header検知)":
         check df.colTable == {"h1":0, "h2":1, "h3":2}.toTable()
         check df.indexCol == indexCol
         check df.datetimeFormat == defaultDatetimeFormat
+        
+    test "(happyPath)datetimeFormatの指定":
+        #setup
+        let indexCol = "h1"
+        let f = "yyyy/MM/dd HH:mm:SS"
+        #do
+        let df = toDataFrame(
+            text=csv,
+            indexCol=indexCol,
+            datetimeFormat=f,
+        )
+        #check
+        check df.data == @[
+            @["1","2","3"],
+            @["10","20","30"],
+            @["100","200","300"],
+        ]
+        check df.columns == @["h1","h2","h3"]
+        check df.colTable == {"h1":0, "h2":1, "h3":2}.toTable()
+        check df.indexCol == indexCol
+        check df.datetimeFormat == f
     
-    test "(exception)duplicatedHeaderをtrueにしない状態で重複した列名を指定":
+    test "(exceptionPath)duplicatedHeaderをtrueにしない状態で重複した列名を指定":
         #setup
         var csv2 = "dup,dup2,dup,dup2\n"
         csv2 &= "1,2,3,4\n"
@@ -263,8 +307,35 @@ suite "toDataFrame(各行のデータ指定)":
         check df.colTable == {"col1":0,"col2":1,"col3":2,"col4":3}.toTable()
         check df.indexCol == "col1"
         check df.datetimeFormat == defaultDatetimeFormat
+        
+    test "(happyPath)datetimeFormatの指定":
+        #setup
+        let indexCol = "col1"
+        let f = "yyyy/MM/dd HH:mm:SS"
+        #do
+        var df = toDataFrame(
+            [
+                @[1,2,3,4],
+                @[5,6,7],
+                @[8,9],
+            ],
+            colNames=["col1","col2","col3","col4"],
+            indexCol=indexCol,
+            datetimeFormat=f,
+        )
+        #check
+        check df.data == @[
+            @["1","5","8"],
+            @["2","6","9"],
+            @["3","7",""],
+            @["4","",""],
+        ]
+        check df.columns == @["col1","col2","col3","col4"]
+        check df.colTable == {"col1":0,"col2":1,"col3":2,"col4":3}.toTable()
+        check df.indexCol == indexCol
+        check df.datetimeFormat == f
 
-    test "(exception)列名数 < データの長さ":
+    test "(exceptionPath)列名数 < データの長さ":
         expect StringDataFrameError:
             discard toDataFrame(
                 [
@@ -273,7 +344,7 @@ suite "toDataFrame(各行のデータ指定)":
                 colNames=["col1","col2","col3","col4"],
             )
 
-    test "(exception)存在しない列名をインデックス列名に指定":
+    test "(exceptionPath)存在しない列名をインデックス列名に指定":
         expect StringDataFrameError:
             discard toDataFrame(
                 [
@@ -305,8 +376,52 @@ suite "toDataFrame(各列のデータ指定)":
         check df.colTable == {"col1":0,"col2":1}.toTable()
         check df.indexCol == "col1"
         check df.datetimeFormat == defaultDatetimeFormat
+        
+    test "(happyPath)indexColの設定":
+        #setup
+        let indexCol = "col1"
+        #do
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[3,4],
+            },
+            indexCol = indexCol,
+        )
+        #check
+        check df.data == @[
+            @["1","2"],
+            @["3","4"],
+        ]
+        check df.columns == @["col1","col2"]
+        check df.colTable == {"col1":0,"col2":1}.toTable()
+        check df.indexCol == indexCol
+        check df.datetimeFormat == defaultDatetimeFormat
+        
+    test "(happyPath)datetimeFormatの設定":
+        #setup
+        let indexCol = "col1"
+        let f = "yyyy/MM/dd HH:mm:SS"
+        #do
+        var df = toDataFrame(
+            {
+                "col1": @[1,2],
+                "col2": @[3,4],
+            },
+            indexCol = indexCol,
+            datetimeFormat = f,
+        )
+        #check
+        check df.data == @[
+            @["1","2"],
+            @["3","4"],
+        ]
+        check df.columns == @["col1","col2"]
+        check df.colTable == {"col1":0,"col2":1}.toTable()
+        check df.indexCol == indexCol
+        check df.datetimeFormat == f
     
-    test "(exception)各列のデータ長が不揃い":
+    test "(exceptionPath)各列のデータ長が不揃い":
         expect StringDataFrameError:
             discard toDataFrame(
                 {

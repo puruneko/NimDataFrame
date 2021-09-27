@@ -39,6 +39,26 @@ proc initSeries*(): Series =
 proc initFilterSeries*(): FilterSeries =
     result = @[]
 
+proc `==`*(a: StringDataFrame, b: StringDataFrame): bool =
+    result = (
+        a.data == b.data and
+        a.columns == b.columns and
+        a.indexCol == b.indexCol
+    )
+
+proc `!=`*(a: StringDataFrame, b: StringDataFrame): bool =
+    result = not (a == b)
+
+proc `===`*(a: StringDataFrame, b: StringDataFrame): bool =
+    result = (
+        a == b and
+        a.colTable == b.colTable and
+        a.datetimeFormat == b.datetimeFormat
+    )
+
+proc `!==`*(a: StringDataFrame, b: StringDataFrame): bool =
+    result = not (a === b)
+
 template `[]`*(df: StringDataFrame, colName: ColName): untyped =
     ## DataFrameからSeriesを取り出す.
     df.data[df.colTable[colName]]
@@ -161,6 +181,11 @@ proc toString*[T](arr: openArray[T]): Series =
     for a in arr:
         result.add(a)
 
+
+proc initRow*[T](cells: openArray[(ColName,T)]): Row =
+    result = initRow()
+    for (colName, cell) in cells:
+        result[colName] = cell.parseString()
 
 proc initStringDataFrame*(): StringDataFrame =
     result.data = @[]
@@ -295,7 +320,7 @@ proc size*(df: StringDataFrame, excludeIndex=false): int =
             df.columns.len
     )
 
-
+#[
 proc appendRow*(df: StringDataFrame, row: Row, autoIndex=false, fillEmpty=false): StringDataFrame =
     ##
     runnableExamples:
@@ -352,20 +377,9 @@ proc appendRow*(df: StringDataFrame, row: Row, autoIndex=false, fillEmpty=false)
                             result[colName].add(dfEmpty)
     else:
         raise newException(StringDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
+]#
 
-proc appendRow*[T](df: StringDataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false): StringDataFrame =
-    var newRow: Row
-    for (colName, value) in row:
-        newRow[colName] = value.parseString()
-    result = df.appendRow(newRow, autoIndex, fillEmpty)
-
-proc addRow*(df: var StringDataFrame, row: Row, autoIndex=false, fillEmpty=false) =
-    df = df.appendRow(row, autoIndex, fillEmpty)
-
-proc addRow*[T](df: var StringDataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmpty=false) =
-    df = df.appendRow(row, autoIndex, fillEmpty)
-
-proc appendRows*[T](df: StringDataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false): StringDataFrame =
+proc appendRows*[T](df: StringDataFrame, rows: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false): StringDataFrame =
     ##
     runnableExamples:
         var df = toDataFrame(
@@ -377,7 +391,7 @@ proc appendRows*[T](df: StringDataFrame, items: openArray[(ColName, seq[T])], au
             indexCol = "a",
         )
         df = df.appendRow(
-            items = {
+            rows = {
                 "b": @[50,60],
                 "c": @[500]
             },
@@ -388,22 +402,22 @@ proc appendRows*[T](df: StringDataFrame, items: openArray[(ColName, seq[T])], au
     ##
 
     result = df
-    let itemTable = items.toTable()
+    let rowTable = rows.toTable()
     var columns: seq[ColName] = @[]
     var lengths: seq[int] = @[]
-    for (colName, s) in itemTable.pairs():
+    for (colName, s) in rowTable.pairs():
         columns.add(colName)
         lengths.add(s.len)
     let columnsHash = toHashSet(columns)
     let dfColumnsHash = toHashSet(df.columns)
     let lengthsHash = toHashSet(lengths)
-    let length = max(toHashSet(lengths).toSeq())
+    let length = lengths.max()
     let dfLen = df.len
     if dfColumnsHash == columnsHash or
-        fillEmptyCol or
+        (fillEmptyCol and (columnsHash - dfColumnsHash).len == 0) or
         (autoIndex and dfColumnsHash - toHashSet([df.indexCol]) == columnsHash):
         if lengthsHash.len == 1 or fillEmptyRow:
-            for colName in dfColumnsHash:
+            for colName in dfColumnsHash.items:
                 #fillEmptyColフラグあり
                 if fillEmptyCol:
                     #fillEmptyRowフラグあり
@@ -419,9 +433,9 @@ proc appendRows*[T](df: StringDataFrame, items: openArray[(ColName, seq[T])], au
                                     result[colName].add(dfEmpty)
                             #列名がある場合
                             else:
-                                for c in itemTable[colName]:
+                                for c in rowTable[colName]:
                                     result[colName].add(c)
-                                for i in itemTable[colName].len..<length:
+                                for i in rowTable[colName].len..<length:
                                     result[colName].add(dfEmpty)
                     #fillEmptyRowフラグ無し
                     else:
@@ -436,7 +450,7 @@ proc appendRows*[T](df: StringDataFrame, items: openArray[(ColName, seq[T])], au
                                     result[colName].add(dfEmpty)
                             #列名がある場合
                             else:
-                                for c in itemTable[colName]:
+                                for c in rowTable[colName]:
                                     result[colName].add(c)
                 #fillEmptyColフラグ無し
                 else:
@@ -447,9 +461,9 @@ proc appendRows*[T](df: StringDataFrame, items: openArray[(ColName, seq[T])], au
                             for i in 0..<length:
                                 result[colName].add(dfLen+i)
                         else:
-                            for c in itemTable[colName]:
+                            for c in rowTable[colName]:
                                 result[colName].add(c)
-                            for i in itemTable[colName].len..<length:
+                            for i in rowTable[colName].len..<length:
                                 result[colName].add(dfEmpty)
                     #fillEmptyRowフラグ無し
                     else:
@@ -458,15 +472,26 @@ proc appendRows*[T](df: StringDataFrame, items: openArray[(ColName, seq[T])], au
                             for i in 0..<length:
                                 result[colName].add(dfLen+i)
                         else:
-                            for c in itemTable[colName]:
+                            for c in rowTable[colName]:
                                 result[colName].add(c)
         else:
-            raise newException(StringDataFrameError, fmt"items must be same length, but got '{lengthsHash}'")
+            raise newException(StringDataFrameError, fmt"rows must be same length, but got '{lengthsHash}'")
     else:
-        raise newException(StringDataFrameError, fmt"not found {dfColumnsHash-columnsHash}")
+        let diff = dfColumnsHash - columnsHash
+        raise newException(StringDataFrameError, fmt"not found {diff}")
 
-proc addRows*[T](df: var StringDataFrame, items: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false) =
-    df = df.appendRows(items, autoIndex, fillEmptyRow, fillEmptyCol)
+proc addRows*[T](df: var StringDataFrame, rows: openArray[(ColName, seq[T])], autoIndex=false, fillEmptyRow=false, fillEmptyCol=false) =
+    df = df.appendRows(rows, autoIndex, fillEmptyRow, fillEmptyCol)
+
+proc appendRow*[T](df: StringDataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmptyCol=false): StringDataFrame =
+    var newRows: seq[(ColName, seq[T])] =
+        collect(newSeq):
+            for r in row:
+                (r[0], @[r[1]])
+    result = df.appendRows(newRows, autoIndex, false, fillEmptyCol)
+
+proc addRow*[T](df: var StringDataFrame, row: openArray[(ColName, T)], autoIndex=false, fillEmptyCol=false) =
+    df = df.appendRow(row, autoIndex, fillEmptyCol)
 
 proc appendColumns*[T](df: StringDataFrame, columns: openArray[(ColName, seq[T])], fillEmpty=false, override=false): StringDataFrame =
     result = df
@@ -485,7 +510,6 @@ proc appendColumns*[T](df: StringDataFrame, columns: openArray[(ColName, seq[T])
     let lengthHash = toHashSet(lengths)
     let colLength = max(lengths)
     let dfLen = df.len
-    echo dfLen, lengthHash, colLength, intersectionColumns
     #すべての長さが一致していた場合、またはfillEmptyオプションがついている場合
     if ((fillEmpty and colLength <= dfLen) or (not fillEmpty and lengthHash.len == 1 and colLength == dfLen)) and
         (override or (not override and intersectionColumns.len == 0)):
@@ -542,6 +566,9 @@ proc dropColumns*(df: StringDataFrame, colNames: openArray[ColName], newIndexCol
     if (not forceDropIndex and newIndexCol == reservedColName and colNames.contains(df.indexCol)) or
         (newIndexCol != reservedColName and colNames.contains(newIndexCol)):
         raise newException(StringDataFrameError, fmt"can not drop index column({df.indexCol})")
+    if (toHashSet(colNames) - toHashSet(df.columns)).len != 0:
+        let diff = toHashSet(colNames) - toHashSet(df.columns)
+        raise newException(StringDataFrameError, fmt"not found {diff}")
     for colName in colNames:
         let itr = result.colTable[colName]
         result.data.delete(itr)
