@@ -1,6 +1,8 @@
 import sugar
+import macros
 import sequtils
 import strutils
+import strformat
 import tables
 import stats
 import math
@@ -55,42 +57,114 @@ proc `>=`*(a: float, b: Cell): bool =
 proc `<=`*(a: float, b: Cell): bool =
     result = a <= b.parseFloat()
 
+
+macro compareSeriesAndT(a: Series, b: typed, operator: untyped): untyped =
+    template body(compExpression: untyped): untyped{.dirty.} =
+        when typeof(b) is int:
+            result =
+                collect(newSeq):
+                    for aa in a.toInt():
+                        compExpression
+        when typeof(b) is float:
+            result =
+                collect(newSeq):
+                    for aa in a.toFloat():
+                        compExpression
+        when typeof(b) is DateTime:
+            result =
+                collect(newSeq):
+                    for aa in a.toDatetime():
+                        compExpression
+        else:
+            result =
+                collect(newSeq):
+                    for aa in a.toInt():
+                        compExpression
+    var compExpression = newCall(
+        nnkAccQuoted.newTree(
+            operator
+        ),
+        newIdentNode("z"),
+        newIdentNode("y"),
+    )
+    result = getAst(body(compExpression))
+
 proc `===`*[T](a: Series, b: T): FilterSeries =
-    let bString = b.parseString()
-    result =
-        collect(newSeq):
-            for c in a:
-                c == bString
+    let x = a
+    let y = b
+    compareSeriesAndT(x, y, `==`)
+
 proc `!==`*[T](a: Series, b: T): FilterSeries =
-    let bString = b.parseString()
-    result =
-        collect(newSeq):
-            for c in a:
-                c != bString
+    let x = a
+    let y = b
+    compareSeriesAndT(x, y, `!=`)
+
 proc `>`*[T](a: Series, b: T): FilterSeries =
-    let bString = b.parseString()
-    result =
-        collect(newSeq):
-            for c in a:
-                c > bString
+    let x = a
+    let y = b
+    compareSeriesAndT(x, y, `>`)
+    
 proc `<`*[T](a: Series, b: T): FilterSeries =
-    let bString = b.parseString()
-    result =
-        collect(newSeq):
-            for c in a:
-                c < bString
+    let x = a
+    let y = b
+    compareSeriesAndT(x, y, `<`)
+    
 proc `>=`*[T](a: Series, b: T): FilterSeries =
-    let bString = b.parseString()
-    result =
-        collect(newSeq):
-            for c in a:
-                c >= bString
+    let x = a
+    let y = b
+    compareSeriesAndT(x, y, `>=`)
+    
 proc `<=`*[T](a: Series, b: T): FilterSeries =
-    let bString = b.parseString()
+    let x = a
+    let y = b
+    compareSeriesAndT(x, y, `<=`)
+    
+proc `===`*[T](a: T, b: Series): FilterSeries =
+    let x = b
+    let y = a
+    compareSeriesAndT(x, y, `==`)
+
+proc `!==`*[T](a: T, b: Series): FilterSeries =
+    let x = b
+    let y = a
+    compareSeriesAndT(x, y, `!=`)
+
+proc `>`*[T](a: T, b: Series): FilterSeries =
+    let x = b
+    let y = a
+    compareSeriesAndT(x, y, `<`)
+
+proc `<`*[T](a: T, b: Series): FilterSeries =
+    let x = b
+    let y = a
+    compareSeriesAndT(x, y, `>`)
+
+proc `>=`*[T](a: T, b: Series): FilterSeries =
+    let x = b
+    let y = a
+    compareSeriesAndT(x, y, `<=`)
+
+proc `<=`*[T](a: T, b: Series): FilterSeries =
+    let x = b
+    let y = a
+    compareSeriesAndT(x, y, `>=`)
+
+proc `&`*(a: FilterSeries, b: FilterSeries): FilterSeries =
+    if a.len != b.len:
+        raise newException(StringDataFrameError,
+                fmt"& operator must be operated with FilterSeries of the same length")
     result =
         collect(newSeq):
-            for c in a:
-                c <= bString
+            for i in 0..<a.len:
+                a[i] and b[i]
+proc `|`*(a: FilterSeries, b: FilterSeries): FilterSeries =
+    if a.len != b.len:
+        raise newException(StringDataFrameError,
+                fmt"& operator must be operated with FilterSeries of the same length")
+    result =
+        collect(newSeq):
+            for i in 0..<a.len:
+                a[i] or b[i]
 #[
 ]#
 

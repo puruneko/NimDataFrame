@@ -10,6 +10,8 @@ import re
 import math
 import encodings
 
+import ../src/stringdataframe
+
 #import threadpool
 {.experimental: "parallel".}
 
@@ -174,3 +176,35 @@ var c2 =
 echo cpuTime() - tStart
 
 echo toHashSet([1,2,3])-toHashSet([1,2,3,4])
+
+echo `<`(1,2)
+
+macro compareSeriesAndT(x: seq[string], y:typed, operator:untyped): untyped =
+    template body(compExpression: untyped):untyped{.dirty.} =
+        echo x, y
+        when typeof(y) is int:
+            result =
+                collect(newSeq):
+                    for z in x.toInt():
+                        compExpression
+    var compExpression = newCall(
+        nnkAccQuoted.newTree(
+            operator
+        ),
+        newIdentNode("z"),
+        newIdentNode("y"),
+    )
+    result = getAst(body(compExpression))
+
+proc `>`*[T](a: seq[string], b: T): seq[bool] =
+    let x = a
+    let y = b
+    compareSeriesAndT(x, y, `>`)
+
+proc `>`*[T](a: T, b: Series): FilterSeries =
+    let x = b
+    let y = a
+    compareSeriesAndT(x, y, `<`)
+
+echo @["1","2","3"] > 1
+echo 2 > @["1","2","3"]
