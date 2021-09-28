@@ -58,27 +58,27 @@ proc `<=`*(a: float, b: Cell): bool =
     result = a <= b.parseFloat()
 
 
-macro compareSeriesAndT(a: Series, b: typed, operator: untyped): untyped =
+macro compareSeriesAndT(x: Series, y: typed, operator: untyped): untyped =
     template body(compExpression: untyped): untyped{.dirty.} =
-        when typeof(b) is int:
+        when typeof(y) is int:
             result =
                 collect(newSeq):
-                    for aa in a.toInt():
+                    for z in x.toInt():
                         compExpression
-        when typeof(b) is float:
+        when typeof(y) is float:
             result =
                 collect(newSeq):
-                    for aa in a.toFloat():
+                    for z in x.toFloat():
                         compExpression
-        when typeof(b) is DateTime:
+        when typeof(y) is DateTime:
             result =
                 collect(newSeq):
-                    for aa in a.toDatetime():
+                    for z in x.toDatetime():
                         compExpression
         else:
             result =
                 collect(newSeq):
-                    for aa in a.toInt():
+                    for z in x.toInt():
                         compExpression
     var compExpression = newCall(
         nnkAccQuoted.newTree(
