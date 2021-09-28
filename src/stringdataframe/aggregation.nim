@@ -1,5 +1,6 @@
 import sugar
 import macros
+import algorithm
 import strutils
 import strformat
 import sequtils
@@ -509,7 +510,7 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                 let datetimeId = m1
                 let w = m0.parseInt()
                 #インデックスがdatetimeフォーマットに準拠している場合
-                let datetimes = dfre.data[dfre.data.indexCol].toDatetime(dfre.data.datetimeFormat)
+                let datetimes = dfre.data[dfre.data.indexCol].toDatetime(dfre.data.datetimeFormat).sorted()
                 echo cpuTime() - tStart
                 let getInterval = genGetInterval(datetimeId)
                 let startDatetime = flattenDatetime(datetimes[0], datetimeId)
@@ -664,7 +665,7 @@ proc aggMath*(dfre: StringDataFrameResample, fn: openArray[float] -> float): Str
                 let datetimeId = m1
                 let w = m0.parseInt()
                 #インデックスがdatetimeフォーマットに準拠している場合
-                let datetimes = dfre.data[dfre.data.indexCol].toDatetime()
+                let datetimes = dfre.data[dfre.data.indexCol].toDatetime(dfre.data.datetimeFormat).sorted()
                 echo cpuTime() - tStart
                 let getInterval = genGetInterval(datetimeId)
                 let startDatetime = flattenDatetime(datetimes[0], datetimeId)
@@ -803,7 +804,7 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
             try:
                 let datetimeId = m1
                 let w = m0.parseInt()
-                let datetimes = dfro.data[dfro.data.indexCol].toDatetime()
+                let datetimes = dfro.data[dfro.data.indexCol].toDatetime(dfro.data.datetimeFormat).sorted()
                 let getInterval = genGetInterval(datetimeId)
                 var index: seq[DateTime] = @[]
                 #resultの初期化
@@ -954,7 +955,7 @@ proc aggMath*(dfro: StringDataFrameRollilng, fn: openArray[float] -> float): Str
             try:
                 let datetimeId = m1
                 let w = m0.parseInt()
-                let datetimes = dfro.data[dfro.data.indexCol].toDatetime()
+                let datetimes = dfro.data[dfro.data.indexCol].toDatetime(dfro.data.datetimeFormat).sorted()
                 let getInterval = genGetInterval(datetimeId)
                 var index: seq[DateTime] = @[]
                 for colName in dfro.data.columns:
