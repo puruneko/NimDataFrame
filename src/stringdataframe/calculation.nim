@@ -6,148 +6,221 @@ import strformat
 import tables
 import stats
 import math
+import times
 
 import typedef
 import core
 
-proc `+`*(a: Cell, b: float): float =
-    ## 左辺Cell型、右辺float型の加算を計算する.
-    parseFloat(a) + b
-proc `-`*(a: Cell, b: float): float =
-    parseFloat(a) - b
-proc `*`*(a: Cell, b: float): float =
-    parseFloat(a) * b
-proc `/`*(a: Cell, b: float): float =
-    parseFloat(a) / b
-proc `+`*(a: float, b: Cell): float =
-    ## 左辺float型、右辺Cell型の加算を計算する.
-    a + parseFloat(b)
-proc `-`*(a: float, b: Cell): float =
-    a - parseFloat(b)
-proc `*`*(a: float, b: Cell): float =
-    a * parseFloat(b)
-proc `/`*(a: float, b: Cell): float =
-    a / parseFloat(b)
 
-#TODO: int版も作る
-proc `==`*(a: Cell, b: float): bool =
-    ## 左辺Cell型、右辺float型を等価比較する.
-    result = a.parseFloat() == b
-proc `!=`*(a: Cell, b: float): bool =
-    result = a.parseFloat() != b
-proc `>`*(a: Cell, b: float): bool =
-    result = a.parseFloat() > b
-proc `<`*(a: Cell, b: float): bool =
-    result = a.parseFloat() < b
-proc `>=`*(a: Cell, b: float): bool =
-    result = a.parseFloat() >= b
-proc `<=`*(a: Cell, b: float): bool =
-    result = a.parseFloat() <= b
-proc `==`*(a: float, b: Cell): bool =
-    ## 左辺float型、右辺Cell型を等価比較する.
-    result = a == b.parseFloat()
-proc `!=`*(a: float, b: Cell): bool =
-    result = a != b.parseFloat()
-proc `>`*(a: float, b: Cell): bool =
-    result = a > b.parseFloat()
-proc `<`*(a: float, b: Cell): bool =
-    result = a < b.parseFloat()
-proc `>=`*(a: float, b: Cell): bool =
-    result = a >= b.parseFloat()
-proc `<=`*(a: float, b: Cell): bool =
-    result = a <= b.parseFloat()
-
-
-macro compareSeriesAndT(x: Series, y: typed, operator: untyped): untyped =
-    template body(compExpression: untyped): untyped{.dirty.} =
-        when typeof(y) is int:
-            result =
-                collect(newSeq):
-                    for z in x.toInt():
-                        compExpression
-        when typeof(y) is float:
-            result =
-                collect(newSeq):
-                    for z in x.toFloat():
-                        compExpression
-        when typeof(y) is DateTime:
-            result =
-                collect(newSeq):
-                    for z in x.toDatetime():
-                        compExpression
+macro operateCellAndT(a: typed, b: typed, operator: untyped): untyped =
+    template body(opExpression: untyped): untyped{.dirty.} =
+        echo a, b, typeof(b)
+        when typeof(a) is int or typeof(b) is int:
+            when typeof(a) is int:
+                let left = a
+                let right = b.parseInt()
+            else:
+                let left = a.parseInt()
+                let right = b
         else:
-            result =
-                collect(newSeq):
-                    for z in x.toInt():
-                        compExpression
-    var compExpression = newCall(
+            when typeof(a) is float or typeof(b) is float:
+                when typeof(a) is float:
+                    let left = a
+                    let right = b.parseFloat()
+                else:
+                    let left = a.parseFloat()
+                    let right = b
+            else:
+                when typeof(a) is DateTime or typeof(b) is DateTime:
+                    when typeof(a) is DateTime:
+                        let left = a
+                        let right = b.parseDatetime()
+                    else:
+                        let left = a.parseDatetime()
+                        let right = b
+                else:
+                    when typeof(a) is Cell:
+                        let left = a
+                        let right = b.parseString()
+                    else:
+                        let left = a.parseString()
+                        let right = b
+        result = opExpression
+    var opExpression = newCall(
         nnkAccQuoted.newTree(
             operator
         ),
-        newIdentNode("z"),
-        newIdentNode("y"),
+        newIdentNode("left"),
+        newIdentNode("right"),
     )
-    result = getAst(body(compExpression))
+    result = getAst(body(opExpression))
+
+proc `+`*(a: Cell, b: StringDataFrameSafeTypes): StringDataFrameSafeTypes =
+    ## 左辺Cell型、右辺T型の加算を計算する.
+    operateCellAndT(a, b, `+`)
+
+proc `-`*(a: Cell, b: StringDataFrameSafeTypes): StringDataFrameSafeTypes =
+    operateCellAndT(a, b, `-`)
+
+proc `*`*(a: Cell, b: StringDataFrameSafeTypes): StringDataFrameSafeTypes =
+    operateCellAndT(a, b, `*`)
+
+proc `/`*(a: Cell, b: StringDataFrameSafeTypes): StringDataFrameSafeTypes =
+    operateCellAndT(a, b, `/`)
+
+proc `+`*(a: StringDataFrameSafeTypes, b: Cell): StringDataFrameSafeTypes =
+    ## 左辺T型、右辺Cell型の加算を計算する.
+    operateCellAndT(b, a, `+`)
+
+proc `-`*(a: StringDataFrameSafeTypes, b: Cell): StringDataFrameSafeTypes =
+    operateCellAndT(b, a, `-`)
+
+proc `*`*(a: StringDataFrameSafeTypes, b: Cell): StringDataFrameSafeTypes =
+    operateCellAndT(b, a, `*`)
+
+proc `/`*(a: StringDataFrameSafeTypes, b: Cell): StringDataFrameSafeTypes =
+    operateCellAndT(b, a, `/`)
+
+proc `===`*(a: Cell, b: StringDataFrameSafeTypes): bool =
+    ## 左辺Cell型、右辺T型を等価比較する.
+    operateCellAndT(a, b, `==`)
+
+proc `!==`*(a: Cell, b: StringDataFrameSafeTypes): bool =
+    operateCellAndT(a, b, `!=`)
+
+proc `>`*(a: Cell, b: StringDataFrameSafeTypes): bool =
+    operateCellAndT(a, b, `>`)
+
+proc `<`*(a: Cell, b: StringDataFrameSafeTypes): bool =
+    operateCellAndT(a, b, `<`)
+
+proc `>=`*(a: Cell, b: StringDataFrameSafeTypes): bool =
+    operateCellAndT(a, b, `>=`)
+
+proc `<=`*(a: Cell, b: StringDataFrameSafeTypes): bool =
+    operateCellAndT(a, b, `<=`)
+
+proc `===`*(a: StringDataFrameSafeTypes, b: Cell): bool =
+    ## 左辺T型、右辺Cell型を等価比較する.
+    operateCellAndT(b, a, `==`)
+
+proc `!==`*(a: StringDataFrameSafeTypes, b: Cell): bool =
+    operateCellAndT(b, a, `!=`)
+    
+proc `>`*(a: StringDataFrameSafeTypes, b: Cell): bool =
+    operateCellAndT(b, a, `>`)
+    
+proc `<`*(a: StringDataFrameSafeTypes, b: Cell): bool =
+    operateCellAndT(b, a, `<`)
+    
+proc `>=`*(a: StringDataFrameSafeTypes, b: Cell): bool =
+    operateCellAndT(b, a, `>=`)
+    
+proc `<=`*(a: StringDataFrameSafeTypes, b: Cell): bool =
+    operateCellAndT(b, a, `<=`)
+
+
+macro operateSeriesAndT(a: typed, b: typed, operator: untyped): untyped =
+    template body(opExpression: untyped): untyped{.dirty.} =
+        echo a, b, typeof(b)
+        when typeof(a) is int or typeof(b) is int:
+            when typeof(a) is int:
+                let left = a
+                result =
+                    collect(newSeq):
+                        for right in b.toInt():
+                            opExpression
+            else:
+                let right = b
+                result =
+                    collect(newSeq):
+                        for left in a.toInt():
+                            opExpression
+        else:
+            when typeof(a) is float or typeof(b) is float:
+                when typeof(a) is float:
+                    let left = a
+                    result =
+                        collect(newSeq):
+                            for right in b.toFloat():
+                                opExpression
+                else:
+                    let right = b
+                    result =
+                        collect(newSeq):
+                            for left in a.toFloat():
+                                opExpression
+            else:
+                when typeof(a) is DateTime or typeof(b) is DateTime:
+                    when typeof(a) is DateTime:
+                        let left = a
+                        result =
+                            collect(newSeq):
+                                for right in b.toDatetime():
+                                    opExpression
+                    else:
+                        let right = b
+                        result =
+                            collect(newSeq):
+                                for left in a.toDatetime():
+                                    opExpression
+                else:
+                    when typeof(b) is Series:
+                        let left = a.parseString()
+                        result =
+                            collect(newSeq):
+                                for right in b:
+                                    opExpression
+                    else:
+                        let right = b.parseString()
+                        result =
+                            collect(newSeq):
+                                for left in a:
+                                    opExpression
+    var opExpression = newCall(
+        nnkAccQuoted.newTree(
+            operator
+        ),
+        newIdentNode("left"),
+        newIdentNode("right"),
+    )
+    result = getAst(body(opExpression))
 
 proc `===`*[T](a: Series, b: T): FilterSeries =
-    let x = a
-    let y = b
-    compareSeriesAndT(x, y, `==`)
+    operateSeriesAndT(a, b, `==`)
 
 proc `!==`*[T](a: Series, b: T): FilterSeries =
-    let x = a
-    let y = b
-    compareSeriesAndT(x, y, `!=`)
+    operateSeriesAndT(a, b, `!=`)
 
 proc `>`*[T](a: Series, b: T): FilterSeries =
-    let x = a
-    let y = b
-    compareSeriesAndT(x, y, `>`)
+    operateSeriesAndT(a, b, `>`)
     
 proc `<`*[T](a: Series, b: T): FilterSeries =
-    let x = a
-    let y = b
-    compareSeriesAndT(x, y, `<`)
-    
+    operateSeriesAndT(a, b, `<`)
+
 proc `>=`*[T](a: Series, b: T): FilterSeries =
-    let x = a
-    let y = b
-    compareSeriesAndT(x, y, `>=`)
+    operateSeriesAndT(a, b, `>=`)
     
 proc `<=`*[T](a: Series, b: T): FilterSeries =
-    let x = a
-    let y = b
-    compareSeriesAndT(x, y, `<=`)
+    operateSeriesAndT(a, b, `<=`)
     
 proc `===`*[T](a: T, b: Series): FilterSeries =
-    let x = b
-    let y = a
-    compareSeriesAndT(x, y, `==`)
+    operateSeriesAndT(b, a, `==`)
 
 proc `!==`*[T](a: T, b: Series): FilterSeries =
-    let x = b
-    let y = a
-    compareSeriesAndT(x, y, `!=`)
+    operateSeriesAndT(b, a, `!=`)
 
 proc `>`*[T](a: T, b: Series): FilterSeries =
-    let x = b
-    let y = a
-    compareSeriesAndT(x, y, `<`)
+    operateSeriesAndT(b, a, `>`)
 
 proc `<`*[T](a: T, b: Series): FilterSeries =
-    let x = b
-    let y = a
-    compareSeriesAndT(x, y, `>`)
+    operateSeriesAndT(b, a, `<`)
 
 proc `>=`*[T](a: T, b: Series): FilterSeries =
-    let x = b
-    let y = a
-    compareSeriesAndT(x, y, `<=`)
+    operateSeriesAndT(b, a, `>=`)
 
 proc `<=`*[T](a: T, b: Series): FilterSeries =
-    let x = b
-    let y = a
-    compareSeriesAndT(x, y, `>=`)
+    operateSeriesAndT(b, a, `<=`)
 
 proc `&`*(a: FilterSeries, b: FilterSeries): FilterSeries =
     if a.len != b.len:
@@ -157,6 +230,7 @@ proc `&`*(a: FilterSeries, b: FilterSeries): FilterSeries =
         collect(newSeq):
             for i in 0..<a.len:
                 a[i] and b[i]
+                
 proc `|`*(a: FilterSeries, b: FilterSeries): FilterSeries =
     if a.len != b.len:
         raise newException(StringDataFrameError,

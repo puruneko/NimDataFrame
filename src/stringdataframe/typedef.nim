@@ -1,4 +1,5 @@
 import tables
+import times
 
 type Cell* = string
 type ColName* = string
@@ -26,3 +27,5 @@ type StringDataFrameRollilng* = object
     data*: StringDataFrame
     window*: string
     format*: string
+
+type StringDataFrameSafeTypes* = int|float|DateTime|string
