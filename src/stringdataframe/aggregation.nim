@@ -437,11 +437,11 @@ proc resample*(df: StringDataFrame, window: string, format=defaultDatetimeFormat
 proc genGetInterval*(datetimeId: string): int -> TimeInterval =
         case datetimeId:
         of "Y": result = proc(interval:int):TimeInterval=interval.years
-        of "m": result = proc(interval:int):TimeInterval=interval.months
+        of "M": result = proc(interval:int):TimeInterval=interval.months
         of "d": result = proc(interval:int):TimeInterval=interval.days
         of "H": result = proc(interval:int):TimeInterval=interval.hours
-        of "M": result = proc(interval:int):TimeInterval=interval.minutes
-        of "S": result = proc(interval:int):TimeInterval=interval.seconds
+        of "m": result = proc(interval:int):TimeInterval=interval.minutes
+        of "s": result = proc(interval:int):TimeInterval=interval.seconds
 
 proc flattenDatetime*(dt: DateTime, datetimeId: string): DateTime =
     result = dt
@@ -452,7 +452,7 @@ proc flattenDatetime*(dt: DateTime, datetimeId: string): DateTime =
         result -= result.hour.ord.hours
         result -= result.minute.ord.minutes
         result -= result.second.ord.seconds
-    of "m":
+    of "M":
         result -= (result.monthday.ord.days - 1.days)
         result -= result.hour.ord.hours
         result -= result.minute.ord.minutes
@@ -464,9 +464,9 @@ proc flattenDatetime*(dt: DateTime, datetimeId: string): DateTime =
     of "H":
         result -= result.minute.ord.minutes
         result -= result.second.ord.seconds
-    of "M":
+    of "m":
         result -= result.second.ord.seconds
-    of "S":
+    of "s":
         result = result
 
 template resampleAggTemplate(body: untyped): untyped{.dirty.} =
@@ -474,7 +474,7 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
     result = initStringDataFrame()
     #数字指定かdatetime指定か判断する
     var matches: array[2, string]
-    let matchOk = match(dfre.window, re"(\d+)([YmdHMS])?", matches)
+    let matchOk = match(dfre.window, re"(\d+)([YMdHms])?", matches)
     let m0: string = matches[0]
     let m1: string = matches[1]
     if matchOk:
@@ -632,7 +632,7 @@ proc aggMath*(dfre: StringDataFrameResample, fn: openArray[float] -> float): Str
             fSeriesSeq.add(@[0.0])
     #数字指定かdatetime指定か判断する
     var matches: array[2, string]
-    let matchOk = match(dfre.window, re"(\d+)([YmdHMS])?", matches)
+    let matchOk = match(dfre.window, re"(\d+)([YMdHms])?", matches)
     let m0: string = matches[0]
     let m1: string = matches[1]
     if matchOk:
@@ -753,7 +753,7 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
     result = initStringDataFrame()
     #数字指定かdatetime指定か判断する
     var matches: array[2, string]
-    let matchOk = match(dfro.window, re"(\d+)([YmdHMS])?", matches)
+    let matchOk = match(dfro.window, re"(\d+)([YMdHms])?", matches)
     let m0: string = matches[0]
     let m1: string = matches[1]
     if matchOk:
@@ -922,7 +922,7 @@ proc aggMath*(dfro: StringDataFrameRollilng, fn: openArray[float] -> float): Str
             fSeriesSeq.add(@[0.0])
     #数字指定かdatetime指定か判断する
     var matches: array[2, string]
-    let matchOk = match(dfro.window, re"(\d+)([YmdHMS])?", matches)
+    let matchOk = match(dfro.window, re"(\d+)([YMdHms])?", matches)
     let m0: string = matches[0]
     let m1: string = matches[1]
     if matchOk:
