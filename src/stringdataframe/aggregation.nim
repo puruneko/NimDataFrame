@@ -478,17 +478,17 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
     let m0: string = matches[0]
     let m1: string = matches[1]
     if matchOk:
-        let dataLen = dfre.data.len
+        var df = dfre.data
+        let dataLen = df.len
         #数字のみ（行数指定）の場合
         if m1 == "" and m0 != "":
             #結果を格納する変数を用意しておく
             let w = m0.parseInt()
-            let resampleLen = int(ceil(dataLen/w))
             when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
                 for (colName, _) in fn:
                     result.addColumn(colName)
             else:
-                for colName in dfre.data.columns:
+                for colName in df.columns:
                     result.addColumn(colName)
             #各行をwindow飛ばしで処理する
             var indexSeries: seq[Cell] = @[]
@@ -500,17 +500,19 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                 
                 body
 
-                indexSeries.add(dfre.data[dfre.data.indexCol][i])
+                indexSeries.add(df[df.indexCol][i])
                 index.inc()
-            result.indexCol = dfre.data.indexCol
-            result[dfre.data.indexCol] = indexSeries
+            result.indexCol = df.indexCol
+            result[df.indexCol] = indexSeries
         #datetime範囲指定の場合
         elif m1 != "" and m0 != "":
             try:
                 let datetimeId = m1
                 let w = m0.parseInt()
+                #ソート
+                df = df.datetimeSort()
                 #インデックスがdatetimeフォーマットに準拠している場合
-                let datetimes = dfre.data[dfre.data.indexCol].toDatetime(dfre.data.datetimeFormat).sorted()
+                let datetimes = df[df.indexCol].toDatetime(df.datetimeFormat)
                 echo cpuTime() - tStart
                 let getInterval = genGetInterval(datetimeId)
                 let startDatetime = flattenDatetime(datetimes[0], datetimeId)
@@ -518,7 +520,7 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                     for (colName, _) in fn:
                         result.addColumn(colName)
                 when typeof(fn) is (Series -> T):#agg2用
-                    for colName in dfre.data.columns:
+                    for colName in df.columns:
                         result.addColumn(colName)
                 #DateTime型に変換したindexを上から順にみていく
                 var indexSeries: seq[DateTime] = @[]
@@ -546,11 +548,11 @@ template resampleAggTemplate(body: untyped): untyped{.dirty.} =
                     body
 
                     indexSeries.add(nowLimit - interval)
-                result.indexCol = dfre.data.indexCol
-                result[dfre.data.indexCol] = indexSeries.toString()
+                result.indexCol = df.indexCol
+                result[df.indexCol] = indexSeries.toString()
             except:
                 #インデックスがdatetimeフォーマットでない場合、エラー
-                if not isDatetimeSeries(dfre.data[dfre.data.indexCol]):
+                if not isDatetimeSeries(df[df.indexCol]):
                     raise newException(StringDataFrameError, "index column isn't datetime format")
                 else:
                     raise
@@ -575,7 +577,7 @@ proc agg*[T](dfre: StringDataFrameResample, fn: openArray[(ColName, Series -> T)
         for (colName, f) in fn:
             #result.data[colName].add(f(seriesSeq[colIndices[k]][slice]).parseString())
             #temporarySeries[k][index] = f(seriesSeq[colIndices[k]][slice]).parseString()
-            result[colName].add(f(dfre.data[colName][slice]))
+            result[colName].add(f(df[colName][slice]))
 
 proc agg*[T](dfre: StringDataFrameResample, fn: Series -> T): StringDataFrame =
     ## リサンプルされたDataFrameの各グループの全列に対して関数fnを適用する
@@ -584,10 +586,10 @@ proc agg*[T](dfre: StringDataFrameResample, fn: Series -> T): StringDataFrame =
     ##
 
     resampleAggTemplate:
-        for colIndex, colName in dfre.data.columns.pairs():
+        for colIndex, colName in df.columns.pairs():
             #result.data[colName].add(fn(seriesSeq[colIndex][slice]).parseString())
             #temporarySeries[colIndex][index] = fn(seriesSeq[colIndex][slice]).parseString()
-            result[colIndex].add(fn(dfre.data[colIndex][slice]))
+            result[colIndex].add(fn(df[colIndex][slice]))
 
 proc apply*[T](dfre: StringDataFrameResample, fn: StringDataFrame -> Table[ColName,T]): StringDataFrame =
     ## リサンプルされたDataFrameの各グループのDataFrameに対して関数fnを適用する
@@ -607,11 +609,11 @@ proc apply*[T](dfre: StringDataFrameResample, fn: StringDataFrame -> Table[ColNa
 
     resampleAggTemplate:
         #applyFnに渡すDataFrame作成
-        var dfTemp = initStringDataFrame(dfre.data)
+        var dfTemp = initStringDataFrame(df)
         if slice.b >= dataLen:
             slice.b = dataLen-1
-        for colIndex, colName in dfre.data.columns.pairs():
-            dfTemp[colIndex] = dfre.data[colIndex][slice]
+        for colIndex, colName in df.columns.pairs():
+            dfTemp[colIndex] = df[colIndex][slice]
         #applyFn適用
         var applyTable = fn(dfTemp)
         for (colName, c) in applyTable.pairs():
@@ -622,27 +624,29 @@ proc apply*[T](dfre: StringDataFrameResample, fn: StringDataFrame -> Table[ColNa
 proc aggMath*(dfre: StringDataFrameResample, fn: openArray[float] -> float): StringDataFrame =
     let tStart = cpuTime()
     result = initStringDataFrame()
-    var fSeriesSeq: seq[seq[float]] = @[]
-    var validColumns: seq[int] = @[]
-    for colIndex, colName in dfre.data.columns:
-        try:
-            fSeriesSeq.add(dfre.data[colIndex].toFloat())
-            validColumns.add(colIndex)
-        except:
-            fSeriesSeq.add(@[0.0])
     #数字指定かdatetime指定か判断する
     var matches: array[2, string]
     let matchOk = match(dfre.window, re"(\d+)([YMdHms])?", matches)
     let m0: string = matches[0]
     let m1: string = matches[1]
     if matchOk:
-        let dataLen = dfre.data.len
+        var df = dfre.data
+        let dataLen = df.len
         #数字のみ（行数指定）の場合
         if m1 == "" and m0 != "":
             #結果を格納する変数を用意しておく
             let w = m0.parseInt()
-            for colName in dfre.data.columns:
+            for colName in df.columns:
                 result.addColumn(colName)
+            #キャッシュ
+            var fSeriesSeq: seq[seq[float]] = @[]
+            var validColumns: seq[int] = @[]
+            for colIndex, colName in df.columns:
+                try:
+                    fSeriesSeq.add(df[colIndex].toFloat())
+                    validColumns.add(colIndex)
+                except:
+                    fSeriesSeq.add(@[0.0])
             #各行をwindow飛ばしで処理する
             var indexSeries: seq[Cell] = @[]
             var index = 0
@@ -650,26 +654,37 @@ proc aggMath*(dfre: StringDataFrameResample, fn: openArray[float] -> float): Str
                 var slice = i..<i+w
                 if slice.b >= dataLen:
                     slice.b = dataLen-1
-                for colIndex, colName in dfre.data.columns.pairs():
+                for colIndex, colName in df.columns.pairs():
                     if validColumns.contains(colIndex):
                         result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                     else:
                         result[colIndex].add(dfEmpty)
-                indexSeries.add(dfre.data[dfre.data.indexCol][i])
+                indexSeries.add(df[df.indexCol][i])
                 index.inc()
-            result.indexCol = dfre.data.indexCol
-            result[dfre.data.indexCol] = indexSeries
+            result.indexCol = df.indexCol
+            result[df.indexCol] = indexSeries
         #datetime範囲指定の場合
         elif m1 != "" and m0 != "":
             try:
                 let datetimeId = m1
                 let w = m0.parseInt()
-                #インデックスがdatetimeフォーマットに準拠している場合
-                let datetimes = dfre.data[dfre.data.indexCol].toDatetime(dfre.data.datetimeFormat).sorted()
+                #ソート
+                df = df.datetimeSort()
+                #キャッシュ
+                var fSeriesSeq: seq[seq[float]] = @[]
+                var validColumns: seq[int] = @[]
+                for colIndex, colName in df.columns:
+                    try:
+                        fSeriesSeq.add(df[colIndex].toFloat())
+                        validColumns.add(colIndex)
+                    except:
+                        fSeriesSeq.add(@[0.0])
+                #resultの準備
+                let datetimes = df[df.indexCol].toDatetime(df.datetimeFormat)
                 echo cpuTime() - tStart
                 let getInterval = genGetInterval(datetimeId)
                 let startDatetime = flattenDatetime(datetimes[0], datetimeId)
-                for colName in dfre.data.columns:
+                for colName in df.columns:
                     result.addColumn(colName)
                 #DateTime型に変換したindexを上から順にみていく
                 var indexSeries: seq[DateTime] = @[]
@@ -683,7 +698,7 @@ proc aggMath*(dfre: StringDataFrameResample, fn: openArray[float] -> float): Str
                         var slice = startIndex..<i
                         if slice.b >= dataLen:
                             slice.b = dataLen-1
-                        for colIndex, colName in dfre.data.columns.pairs():
+                        for colIndex, colName in df.columns.pairs():
                             if validColumns.contains(colIndex):
                                 result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                             else:
@@ -695,17 +710,17 @@ proc aggMath*(dfre: StringDataFrameResample, fn: openArray[float] -> float): Str
                 #window刻みの余り分の処理
                 if startIndex < dataLen-1:
                     var slice = startIndex..<dataLen
-                    for colIndex, colName in dfre.data.columns.pairs():
+                    for colIndex, colName in df.columns.pairs():
                         if validColumns.contains(colIndex):
                             result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                         else:
                             result[colIndex].add(dfEmpty)
                     indexSeries.add(nowLimit - interval)
-                result.indexCol = dfre.data.indexCol
-                result[dfre.data.indexCol] = indexSeries.toString()
+                result.indexCol = df.indexCol
+                result[df.indexCol] = indexSeries.toString()
             except:
                 #インデックスがdatetimeフォーマットでない場合、エラー
-                if not isDatetimeSeries(dfre.data[dfre.data.indexCol]):
+                if not isDatetimeSeries(df[df.indexCol]):
                     raise newException(StringDataFrameError, "index column isn't datetime format")
                 else:
                     raise
@@ -757,7 +772,8 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
     let m0: string = matches[0]
     let m1: string = matches[1]
     if matchOk:
-        let dataLen = dfro.data.len
+        var df = dfro.data
+        let dataLen = df.len
         #数字のみ（行数指定）の場合
         if m1 == "" and m0 != "":
             let w = m0.parseInt()
@@ -766,15 +782,15 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
                 for (colName, _) in fn:
                     result.addColumn(colName)
             when typeof(fn) is (Series -> T):#agg2用
-                for colName in dfro.data.columns:
+                for colName in df.columns:
                     result.addColumn(colName)
             when typeof(fn) is (StringDataFrame -> Table[ColName,T]):#apply用
-                var dfTmp = initStringDataFrame(dfro.data)
+                var dfTmp = initStringDataFrame(df)
                 var sliceTmp = 0..1
                 if sliceTmp.b >= dataLen:
                     sliceTmp.b = dataLen-1
-                for colName in dfro.data.columns:
-                    dfTmp[colName] = dfro.data[colName][sliceTmp]
+                for colName in df.columns:
+                    dfTmp[colName] = df[colName][sliceTmp]
                 var at = fn(dfTmp)
                 for (colName, _) in at.pairs():
                     result.addColumn(colName)
@@ -785,7 +801,7 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
             #indexの初期化
             var index: seq[Cell] = @[]
             for i in 0..<w-1:
-                index.add(dfro.data[dfro.data.indexCol][i])
+                index.add(df[df.indexCol][i])
             #各行をwindow毎に処理する
             for i in 0..<dataLen-w:
                 var slice = i..<i+w
@@ -794,33 +810,35 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
                     
                 body
 
-                index.add(dfro.data[dfro.data.indexCol][i])
-            result.indexCol = dfro.data.indexCol
-            if not result.columns.contains(dfro.data.indexCol):
-                result.addColumn(dfro.data.indexCol)
-            result[dfro.data.indexCol] = index
+                index.add(df[df.indexCol][i])
+            result.indexCol = df.indexCol
+            if not result.columns.contains(df.indexCol):
+                result.addColumn(df.indexCol)
+            result[df.indexCol] = index
         #datetime範囲指定の場合
         elif m1 != "" and m0 != "":
             try:
                 let datetimeId = m1
                 let w = m0.parseInt()
-                let datetimes = dfro.data[dfro.data.indexCol].toDatetime(dfro.data.datetimeFormat).sorted()
+                #ソート
+                df = df.datetimeSort()
+                #resultの初期化
+                let datetimes = df[df.indexCol].toDatetime(df.datetimeFormat)
                 let getInterval = genGetInterval(datetimeId)
                 var index: seq[DateTime] = @[]
-                #resultの初期化
                 when typeof(fn) is (openArray[(ColName, Series -> T)]):#agg1用
                     for (colName, _) in fn:
                         result.addColumn(colName)
                 when typeof(fn) is (Series -> T):#agg2用
-                    for colName in dfro.data.columns:
+                    for colName in df.columns:
                         result.addColumn(colName)
                 when typeof(fn) is (StringDataFrame -> Table[ColName,T]):#apply用
-                    var dfTmp = initStringDataFrame(dfro.data)
+                    var dfTmp = initStringDataFrame(df)
                     var sliceTmp = 0..1
                     if sliceTmp.b >= dataLen:
                         sliceTmp.b = dataLen-1
-                    for colName in dfro.data.columns:
-                        dfTmp[colName] = dfro.data[colName][sliceTmp]
+                    for colName in df.columns:
+                        dfTmp[colName] = df[colName][sliceTmp]
                     var at = fn(dfTmp)
                     for (colName, _) in at.pairs():
                         result.addColumn(colName)
@@ -839,13 +857,13 @@ template rollingAggTemplate(body: untyped): untyped{.dirty.} =
                     body
 
                     index.add(dt)
-                result.indexCol = dfro.data.indexCol
-                if not result.columns.contains(dfro.data.indexCol):
-                    result.addColumn(dfro.data.indexCol)
-                result[dfro.data.indexCol] = index.toString()
+                result.indexCol = df.indexCol
+                if not result.columns.contains(df.indexCol):
+                    result.addColumn(df.indexCol)
+                result[df.indexCol] = index.toString()
             except:
                 #インデックスがdatetimeフォーマットでない場合、エラー
-                if not isDatetimeSeries(dfro.data[dfro.data.indexCol]):
+                if not isDatetimeSeries(df[df.indexCol]):
                     raise newException(StringDataFrameError, "index column isn't datetime format")
                 else:
                     raise
@@ -869,7 +887,7 @@ proc agg*[T](dfro: StringDataFrameRollilng, fn: openArray[(ColName, Series -> T)
     rollingAggTemplate:
         for (colName, f) in fn:
             #result.data[colName].add(f(seriesSeq[colTable[colName]][slice]).parseString())
-            result[colName].add(f(dfro.data[colName][slice]))
+            result[colName].add(f(df[colName][slice]))
 
 proc agg*[T](dfro: StringDataFrameRollilng, fn: Series -> T): StringDataFrame =
     ## rollingされたDataFrameの各グループの全列に対して関数fnを適用する
@@ -878,9 +896,9 @@ proc agg*[T](dfro: StringDataFrameRollilng, fn: Series -> T): StringDataFrame =
     ##
 
     rollingAggTemplate:
-        for colIndex, colName in dfro.data.columns.pairs():
+        for colIndex, colName in df.columns.pairs():
             #result.data[colName].add(fn(seriesSeq[colIndex][slice]).parseString())
-            result[colName].add(fn(dfro.data[colIndex][slice]))
+            result[colName].add(fn(df[colIndex][slice]))
 
 proc apply*[T](dfro: StringDataFrameRollilng, fn: StringDataFrame -> Table[ColName,T]): StringDataFrame =
     ## rollingされたDataFrameの各グループのDataFrameに対して関数fnを適用する
@@ -900,11 +918,11 @@ proc apply*[T](dfro: StringDataFrameRollilng, fn: StringDataFrame -> Table[ColNa
 
     rollingAggTemplate:
         #applyFnに渡すDataFrame作成
-        var dfTemp = initStringDataFrame(dfro.data)
+        var dfTemp = initStringDataFrame(df)
         if slice.b >= dataLen:
             slice.b = dataLen-1
-        for colName in dfro.data.columns:
-            dfTemp[colName] = dfro.data[colName][slice]
+        for colName in df.columns:
+            dfTemp[colName] = df[colName][slice]
         #applyFn適用
         var applyTable = fn(dfTemp)
         for (colName, c) in applyTable.pairs():
@@ -914,51 +932,64 @@ proc aggMath*(dfro: StringDataFrameRollilng, fn: openArray[float] -> float): Str
     result = initStringDataFrame()
     var fSeriesSeq: seq[seq[float]] = @[]
     var validColumns: seq[int] = @[]
-    for colIndex, colName in dfro.data.columns:
-        try:
-            fSeriesSeq.add(dfro.data[colIndex].toFloat())
-            validColumns.add(colIndex)
-        except:
-            fSeriesSeq.add(@[0.0])
     #数字指定かdatetime指定か判断する
     var matches: array[2, string]
     let matchOk = match(dfro.window, re"(\d+)([YMdHms])?", matches)
     let m0: string = matches[0]
     let m1: string = matches[1]
     if matchOk:
-        let dataLen = dfro.data.len
+        var df = dfro.data
+        let dataLen = df.len
         #数字のみ（行数指定）の場合
         if m1 == "" and m0 != "":
             let w = m0.parseInt()
             var index: seq[Cell] = @[]
-            for colName in dfro.data.columns:
+            #キャッシュ
+            for colIndex, colName in df.columns:
+                try:
+                    fSeriesSeq.add(df[colIndex].toFloat())
+                    validColumns.add(colIndex)
+                except:
+                    fSeriesSeq.add(@[0.0])
+            #resultの準備
+            for colName in df.columns:
                 result.addColumn(colName)
                 for i in 0..<w-1:
                     result[colName].add(dfEmpty)
             for i in 0..<w-1:
-                index.add(dfro.data[dfro.data.indexCol][i])
+                index.add(df[df.indexCol][i])
             #各行をwindow毎に処理する
             for i in 0..<dataLen-w:
                 var slice = i..<i+w
                 if slice.b >= dataLen:
                     slice.b = dataLen-1
-                for colIndex, colName in dfro.data.columns.pairs():
+                for colIndex, colName in df.columns.pairs():
                     if validColumns.contains(colIndex):
                         result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                     else:
                         result[colIndex].add(dfEmpty)
-                index.add(dfro.data[dfro.data.indexCol][i])
-            result.indexCol = dfro.data.indexCol
-            result[dfro.data.indexCol] = index
+                index.add(df[df.indexCol][i])
+            result.indexCol = df.indexCol
+            result[df.indexCol] = index
         #datetime範囲指定の場合
         elif m1 != "" and m0 != "":
             try:
                 let datetimeId = m1
                 let w = m0.parseInt()
-                let datetimes = dfro.data[dfro.data.indexCol].toDatetime(dfro.data.datetimeFormat).sorted()
+                #ソート
+                df = df.datetimeSort()
+                #キャッシュ
+                for colIndex, colName in df.columns:
+                    try:
+                        fSeriesSeq.add(df[colIndex].toFloat())
+                        validColumns.add(colIndex)
+                    except:
+                        fSeriesSeq.add(@[0.0])
+                #resultの初期化
+                let datetimes = df[df.indexCol].toDatetime(df.datetimeFormat).sorted()
                 let getInterval = genGetInterval(datetimeId)
                 var index: seq[DateTime] = @[]
-                for colName in dfro.data.columns:
+                for colName in df.columns:
                     result.addColumn(colName)
                 #DateTime型に変換したindexを上から順にみていく
                 let timeInterval = getInterval(w)
@@ -971,17 +1002,17 @@ proc aggMath*(dfro: StringDataFrameRollilng, fn: openArray[float] -> float): Str
                         if datetimes[j] <= underLimit:
                             slice.a = j + 1
                             underIndex = j
-                    for colIndex, colName in dfro.data.columns.pairs():
+                    for colIndex, colName in df.columns.pairs():
                         if validColumns.contains(colIndex):
                             result[colIndex].add(fn(fSeriesSeq[colIndex][slice]))
                         else:
                             result[colIndex].add(dfEmpty)
                     index.add(dt)
-                result.indexCol = dfro.data.indexCol
-                result[dfro.data.indexCol] = index.toString()
+                result.indexCol = df.indexCol
+                result[df.indexCol] = index.toString()
             except:
                 #インデックスがdatetimeフォーマットでない場合、エラー
-                if not isDatetimeSeries(dfro.data[dfro.data.indexCol]):
+                if not isDatetimeSeries(df[df.indexCol]):
                     raise newException(StringDataFrameError, "index column isn't datetime format")
                 else:
                     raise

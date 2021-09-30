@@ -201,7 +201,7 @@ proc toBe*() =
         df.setIndex("time").resample("30M").mean().show(true)
     #
     proc aggFnRe(s: Series): float{.closure.} =
-        sum(s)*100
+        sum(s)*100.0
     timeAttack("resample 30M agg2"):
         df.setIndex("time").resample("30M").agg({"sales":aggFnRe}).show(true)
     #
@@ -241,16 +241,16 @@ proc toBe*() =
     timeAttack("addRow"):
         df2.addRow({"a": 3, "b": 5, "c": 30, "d": 300})
         df2.show(true)
-        df2.addRow({"a": 4}, fillEmpty=true)
+        df2.addRow({"a": 4}, fillEmptyCol=true)
         df2.show(true)
         df2.addRow({"b": 7, "c": 50, "d": 500}, autoIndex=true)
         df2.show(true)
-        df2.addRow({"c": 60}, autoIndex=true, fillEmpty=true)
+        df2.addRow({"c": 60}, autoIndex=true, fillEmptyCol=true)
         df2.show(true)
     #
     timeAttack("addRows"):
         df2.addRows(
-            items = {
+            {
                 "b": @[9,10],
                 "c": @[70]
             },
@@ -262,7 +262,7 @@ proc toBe*() =
     #
     timeAttack("addColumns(1)"):
         df2.addColumns(
-            columns = {
+            {
                 "e": @[0,1,2,3,4,5,6,7],
             }
         )
