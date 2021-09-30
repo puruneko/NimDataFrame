@@ -14,7 +14,6 @@ import core
 
 macro operateCellAndT(a: typed, b: typed, operator: untyped): untyped =
     template body(opExpression: untyped): untyped{.dirty.} =
-        echo a, b, typeof(b)
         when typeof(a) is int or typeof(b) is int:
             when typeof(a) is int:
                 let left = a
@@ -122,7 +121,6 @@ proc `<=`*(a: StringDataFrameSafeTypes, b: Cell): bool =
 
 macro operateSeriesAndT(a: typed, b: typed, operator: untyped): untyped =
     template body(opExpression: untyped): untyped{.dirty.} =
-        echo a, b, typeof(b)
         when typeof(a) is int or typeof(b) is int:
             when typeof(a) is int:
                 let left = a
