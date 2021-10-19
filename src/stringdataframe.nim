@@ -303,7 +303,7 @@ proc toDataFrame*[T](
             raise newException(StringDataFrameReservedColNameError,fmt"{reservedColName} is library-reserved name"
                 )
         result.addColumn(colName)
-        for c in s.toString():
+        for c in s:
             result[colName].add(c)
         c.add(colName)
         l.add(s.len)
@@ -326,6 +326,18 @@ proc toDataFrame*[T](
         result.datetimeFormat = datetimeFormat
     #
     result.healthCheck(raiseException=true)
+
+proc toDataFrame*(
+    columns: openArray[ColName],
+    indexCol="",
+    datetimeFormat="",
+): StringDataFrame =
+    var newColumns: seq[(ColName, seq[string])] =
+        collect(newSeq):
+            for colName in columns:
+                (colName, newSeq[string](0))
+    result = toDataFrame(newColumns, indexCol, datetimeFormat)
+
 
 ###############################################################
 proc toCsv*(df: StringDataFrame): string =

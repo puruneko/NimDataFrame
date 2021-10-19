@@ -238,3 +238,16 @@ echo @["1","2","3"] === "1"
 echo "1" === @["1","2","3"]
 
 echo "1" + 1
+
+proc f1(b: openArray[bool]) =
+    echo b
+
+f1(@[true])
+f1([true])
+
+proc f2(b: bool or openArray[bool]) =
+    echo b
+
+f2(true)
+#f2(@[true])
+#f2([true])

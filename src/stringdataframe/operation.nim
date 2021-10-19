@@ -26,7 +26,7 @@ proc fillEmpty*[T](s: Series, fill: T): Series =
 
 proc fillEmpty*[T](df: StringDataFrame, fill: T): StringDataFrame =
     result = initStringDataFrame(df)
-    for colIndex, colName in result.columns.paris():
+    for colIndex, colName in result.columns.pairs():
         result[colIndex] = fillEmpty(df[colIndex], fill)
 
 proc dropEmpty*(s: Series): Series =
@@ -72,6 +72,8 @@ proc renameColumns*(df: StringDataFrame, renameMap: openArray[(ColName,ColName)]
                 result.indexCol = renamePair[1]
             #古い情報を削除する
             result.deleteColumn(renamePair[0])
+        else:
+            raise newException(StringDataFrameError, fmt"not found {renamePair[0]}")
 
 
 proc resetIndex*[T](df: StringDataFrame, fn: int -> T): StringDataFrame =
@@ -89,11 +91,11 @@ proc resetIndex*(df: StringDataFrame): StringDataFrame =
     let f = proc(i: int): Cell = $i
     result = df.resetIndex(f)
 
-proc setIndex*(df: StringDataFrame, indexCol: ColName, deletePredecessor=false): StringDataFrame =
+proc setIndex*(df: StringDataFrame, indexCol: ColName, delete=false): StringDataFrame =
     result = df
     if not df.columns.contains(indexCol):
         raise newException(StringDataFrameError, fmt"not found {indexCol}")
-    if deletePredecessor:
+    if delete:
         result = result.dropColumn(result.indexCol, forceDropIndex=true)
     result.indexCol = indexCol
 
@@ -112,14 +114,14 @@ proc map*[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
     for c in s:
         result.add(fn(fromCell(c)))
 
-proc map*[T](s: Series, fn: string -> T): Series =
+proc stringMap*(s: Series, fn: string -> string): Series =
     let f = proc(c: Cell): string = c
     map(s, fn, f)
-proc intMap*[T](s: Series, fn: int -> T): Series =
+proc intMap*(s: Series, fn: int -> int): Series =
     map(s, fn, parseInt)
-proc floatMap*[T](s: Series, fn: float -> T): Series =
+proc floatMap*(s: Series, fn: float -> float): Series =
     map(s, fn, parseFloat)
-proc datetimeMap*[T](s: Series, fn: DateTime -> T, format=defaultDatetimeFormat): Series =
+proc datetimeMap*(s: Series, fn: DateTime -> DateTime, format=defaultDatetimeFormat): Series =
     map(s, fn, genParseDatetime(format))
 
 proc replace*(df: StringDataFrame, sub: string, by: string): StringDataFrame =
@@ -127,14 +129,14 @@ proc replace*(df: StringDataFrame, sub: string, by: string): StringDataFrame =
     proc f(c: Cell): Cell =
         c.replace(sub, by)
     for colIndex, colName in df.columns.pairs():
-        result[colIndex] = df[colIndex].map(f)
+        result[colIndex] = df[colIndex].stringMap(f)
 
 proc replace*(df: StringDataFrame, sub: Regex, by: string): StringDataFrame =
     result = initStringDataFrame(df)
     proc f(c: Cell): Cell =
         c.replacef(sub, by)
     for colIndex, colName in df.columns.pairs():
-        result.data[colIndex] = df[colIndex].map(f)
+        result.data[colIndex] = df[colIndex].stringMap(f)
 
 
 ###############################################################
@@ -152,15 +154,11 @@ proc filter*(df: StringDataFrame, fltr: Row -> bool): StringDataFrame =
 
 
 ###############################################################
-proc cmpAsc[T](x: (int,T), y: (int,T)): int =
-    if x[1] < y[1]: -1
-    elif x[1] == y[1]: 0
+proc cmpAsc[T](x: T, y: T): int =
+    if x < y: -1
+    elif x == y: 0
     else: 1
-proc cmpDec[T](x: (int,T), y: (int,T)): int =
-    if x[1] < y[1]: 1
-    elif x[1] == y[1]: 0
-    else: -1
-proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell: Cell -> T, ascending=true): StringDataFrame =
+proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell: Cell -> T, ascending=true, ascFn: (T, T) -> int): StringDataFrame =
     ## DataFrameを指定列でソートする.
     ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する.
     ##
@@ -172,25 +170,51 @@ proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell:
             df.indexCol
     var sortSource =
         collect(newSeq):
-            for rowNumber, cell in df[df.colTable[cn]].pairs():
+            for rowNumber, cell in df[cn].pairs():
                 (rowNumber, fromCell(cell))
     if ascending:
-        sortSource.sort(cmpAsc)
+        let ascFn2 = proc(x: (int,T), y: (int,T)): int = ascFn(x[1], y[1])
+        sortSource.sort(ascFn2)
     else:
-        sortSource.sort(cmpDec)
+        let desFn2 = proc(x: (int,T), y: (int,T)): int = ascFn(x[1], y[1]) * -1
+        sortSource.sort(desFn2)
     #
     for sorted in sortSource:
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][sorted[0]])
 
-proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): StringDataFrame =
+proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell: Cell -> T, ascending=true): StringDataFrame =
+    result = sort(df, colName, fromCell, ascending, cmpAsc)
+
+#TODO: x: openArray[T] or Tの適用
+proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCells: openArray[Cell -> T], ascendings=openArray[bool], ascFns: openArray[(T, T) -> int]): StringDataFrame =
+    if colNames.len != fromCells.len or colNames.len != ascendings.len or colNames.len != ascFns.len:
+        raise newException(
+                StringDataFrameError,
+                "colNames and fromCells and asceindings and ascFns must have the same length"
+        )
     result = initStringDataFrame(df, copy=true)
-    for colName in reversed(colNames):
-        result = result.sort(colName, fromCell, ascending)
+    for i in reversed(0..<colNames.len):
+        result = result.sort(colNames[i], fromCells[i], ascendings[i], ascFns[i])
+
+proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true, ascFn: (T, T) -> int): StringDataFrame =
+    let fromCells =
+        collect(newSeq):
+            for _ in colNames:
+                fromCell
+    let ascFns =
+        collect(newSeq):
+            for _ in colNames:
+                ascFn
+    result = df.sort(colNames, fromCells, ascending, ascFns)
+
+proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): StringDataFrame =
+    result = df.sort(colNames, fromCell, ascending, cmpAsc)
 
 proc sort*(df: StringDataFrame, colName: ColName = reservedColName, ascending=true): StringDataFrame =
     let f = proc(c: Cell): Cell = c
     sort(df, colName, f, ascending)
+
 proc sort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
     result = initStringDataFrame(df, copy=true)
     for colName in reversed(colNames):
@@ -221,7 +245,7 @@ proc datetimeSort*(df: StringDataFrame, colNames: openArray[ColName], format=def
 ###############################################################
 proc duplicated*(df: StringDataFrame, colNames: openArray[ColName] = []): FilterSeries =
     ## 重複した行はtrue、それ以外はfalse.
-    ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス）.
+    ## 重複の評価行をcolNamesで指定する（指定なしの場合はインデックス列）.
     ##
     result = initFilterSeries()
     var columns = colNames.toSeq()
@@ -254,6 +278,7 @@ proc dropDuplicates*(df: StringDataFrame, colNames: openArray[ColName] = []): St
 
 proc transpose*(df: StringDataFrame): StringDataFrame =
     result = initStringDataFrame()
+    result.indexCol = df.indexCol
     #indexに重複がある場合、エラー
     if df.duplicated().contains(true):
         raise newException(StringDataFrameError, "duplicate indexes are not allowed in transpose action")
@@ -269,7 +294,7 @@ proc transpose*(df: StringDataFrame): StringDataFrame =
             if colNameTable[i] == df.indexCol:
                 continue
             result[indexValue].add(dfRow[colNameTable[i]][0])
-    result[result.indexCol] =
+    result[df.indexCol] =
         collect(newSeq):
             for colName in df.columns:
                 if colName == df.indexCol:

@@ -9,6 +9,50 @@ import StringDataFrame
 
 echo "\n----------test_core----------"
 
+suite "df~df":
+
+    test "(happyPath)基本機能":
+        #setup
+        let a = toDataFrame(
+            {
+                "col1": @[1,2,3,4],
+                "col2": @[10,20,30,40],
+                "col3": @[100,200,300,400],
+            },
+            indexCol="col1",
+        )
+        let b = toDataFrame(
+            {
+                "col1": @[1,2,3,4],
+                "col2": @[10,20,30,40],
+                "col3": @[100,200,300,400],
+            },
+            indexCol="col1",
+        )
+        #check
+        check a ~ b
+
+    test "(happyPath)列の順番が異なる":
+        #setup
+        let a = toDataFrame(
+            {
+                "col1": @[1,2,3,4],
+                "col2": @[10,20,30,40],
+                "col3": @[100,200,300,400],
+            },
+            indexCol="col1",
+        )
+        let b = toDataFrame(
+            {
+                "col2": @[10,20,30,40],
+                "col3": @[100,200,300,400],
+                "col1": @[1,2,3,4],
+            },
+            indexCol="col1",
+        )
+        #check
+        check a ~ b
+
 suite "df==df, df!=df, df===df, df!==df":
 
     test "(happyPath)df==df:基本機能":

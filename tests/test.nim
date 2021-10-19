@@ -430,6 +430,21 @@ suite "toDataFrame(各列のデータ指定)":
                 },
             )
 
+suite "toDataFrame(空)":
+
+    test "(happyPath)基本機能":
+        #setup
+        var df = toDataFrame(
+            ["col1","col2"],
+            indexCol="col1",
+        )
+        #do
+        check df.data == @[newSeq[Cell](0),newSeq[Cell](0)]
+        check df.columns == @["col1","col2"]
+        check df.colTable == {"col1":0, "col2":1}.toTable()
+        check df.indexCol == "col1"
+        check df.datetimeFormat == defaultDatetimeFormat
+
 suite "toCsv(return string)":
 
     test "(happyPath)基本機能":

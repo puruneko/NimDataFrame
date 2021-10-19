@@ -30,6 +30,15 @@ const defaultDatetimeFormat* = "yyyy-MM-dd HH:mm:ss"
 #parse... : cellに対しての型変換
 #to...    : seriesに対しての型変換
 
+template `[]`*(df: StringDataFrame, colName: ColName): untyped =
+    ## DataFrameからSeriesを取り出す.
+    df.data[df.colTable[colName]]
+
+template `[]`*(df: StringDataFrame, colIndex: int): untyped =
+    ## DataFrameからSeriesを取り出す.
+    df.data[colIndex]
+
+
 proc initRow*(): Row =
     result = initTable[string, Cell]()
 
@@ -38,6 +47,17 @@ proc initSeries*(): Series =
 
 proc initFilterSeries*(): FilterSeries =
     result = @[]
+
+
+proc `~`*(a: StringDataFrame, b: StringDataFrame): bool =
+    if a.indexCol != b.indexCol:
+        return false
+    if toHashSet(a.columns) != toHashSet(b.columns):
+        return false
+    for colName in a.columns:
+        if b[colName] != a[colName]:
+            return false
+    return true
 
 proc `==`*(a: StringDataFrame, b: StringDataFrame): bool =
     result = (
@@ -58,14 +78,6 @@ proc `===`*(a: StringDataFrame, b: StringDataFrame): bool =
 
 proc `!==`*(a: StringDataFrame, b: StringDataFrame): bool =
     result = not (a === b)
-
-template `[]`*(df: StringDataFrame, colName: ColName): untyped =
-    ## DataFrameからSeriesを取り出す.
-    df.data[df.colTable[colName]]
-
-template `[]`*(df: StringDataFrame, colIndex: int): untyped =
-    ## DataFrameからSeriesを取り出す.
-    df.data[colIndex]
 
 proc addColumn*(df: var StringDataFrame, colName: ColName) =
     ## Library外での使用は非推奨
@@ -186,6 +198,9 @@ proc initRow*[T](cells: openArray[(ColName,T)]): Row =
     result = initRow()
     for (colName, cell) in cells:
         result[colName] = cell.parseString()
+
+proc initSeries*[T](s: seq[T]): Series =
+    result = s.toString()
 
 proc initStringDataFrame*(): StringDataFrame =
     result.data = @[]
