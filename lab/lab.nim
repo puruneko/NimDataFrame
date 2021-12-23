@@ -1,5 +1,6 @@
 import sugar
 import macros
+import algorithm
 import strutils
 import strformat
 import sequtils
@@ -8,246 +9,270 @@ import times
 import sets
 import re
 import math
+import complex
 import encodings
 
-import ../src/stringdataframe
+#import ../src/stringdataframe
 
-#import threadpool
-{.experimental: "parallel".}
+let p = proc(y: string): int {.closure.} = parseInt(y)
+let q = proc(y: string): float = parseFloat(y)
 
-var a = "1H"
-var matches: array[2, string]
+macro expandTypeOrSeqTypeWithDefault(pr) =
+    const defaultGenericTypes = {
+        #argumentName: defaultGenericType
+        "x1":"int",
+        "x2":"float",
+    }
+    proc getDefaultGenericType(argName: string): string =
+        for dt in defaultGenericTypes:
+            if dt[0] == argName:
+                return dt[1]
+        return ""
+    proc process(n: NimNode): NimNode =
+        result = n
+        for i in 1 ..< n[3].len:
+            let paramType = n[3][i][^2]
+            if paramType.kind == nnkBracketExpr and paramType[0].eqIdent("TypeOrSeqType"):
+                let argName = $n[3][i][0]
+                let genericParam = $paramType[1][0][0]
+                let (typ, seqTyp, defaultTyp) = (copy(n), copy(n), copy(n))
+                # set type of argument(normal type)
+                typ[3][i][^1] = newEmptyNode()
+                typ[3][i][^2] = copy(paramType[1])
+                # set type of argument(seq type)
+                seqTyp[3][i][^1] = newEmptyNode()
+                seqTyp[3][i][^2] = newTree(nnkBracketExpr, ident"seq", paramType[1])
+                # return 3 types of definition of proc
+                var stmtList = nnkStmtList.newTree()
+                let typList = process(typ)
+                if kind(typList) == nnkStmtList:
+                    for typElem in typList:
+                        stmtList.add(typElem)
+                else:
+                    stmtList.add(typList)
+                let seqTypList = process(seqTyp)
+                if kind(seqTypList) == nnkStmtList:
+                    for seqTypElem in seqTypList:
+                        stmtList.add(seqTypElem)
+                else:
+                    stmtList.add(seqTypList)
+                if getDefaultGenericType(argName) != "":
+                    # set generic parameter to empty(default type)
+                    for i, gp in defaultTyp[2][0].pairs():
+                        if $gp == genericParam:
+                            defaultTyp[2][0].del(i, 1)
+                            break
+                    # set type of argument(default type)
+                    defaultTyp[3][i][^2] = copy(paramType[1])
+                    defaultTyp[3][i][^2][0][0] = newIdentNode(getDefaultGenericType(argName))
+                    let defaultTypList = process(defaultTyp)
+                    if kind(defaultTypList) == nnkStmtList:
+                        for defaultTypElem in defaultTypList:
+                            stmtList.add(defaultTypElem)
+                    else:
+                        stmtList.add(defaultTypList)
+                #return newStmtList(process(typ), process(seqTyp), process(defaultTyp))
+                return stmtList
+    echo treeRepr(pr)
+    result = process(pr)
+    echo "--------"
+    echo treeRepr(result)
 
-echo match(a, re"(\d+)([a-zA-Z]+)?", matches)
-echo matches
+macro expandTypeOrSeqType(pr) =
+    #[
+        TypeOrSeqType以外：無視
+        TypeOrSeqType:
+            genericTypeあり:
+                defaultあり:
+                    type, seqType, staticType(with default)
+                default無し:
+                    type, seqType
+            genericType無し:
+                defaultあり:
+                    type(with default), seqType
+                defaultなし:
+                    type, seqType
+    ]#
+    const defaultGenericType = {
+        "T": "int"
+    }
 
-var tStart = cpuTime()
-const N = 100000
+    proc isGenericType(node: NimNode): bool =
+        for dgt in defaultGenericType:
+            if node.eqIdent(dgt[0]):
+                return true
+        return false
+    proc searchGenericTypeNode(root: NimNode): NimNode =
+        result = newEmptyNode()
+        for i in 0..<root.len:
+            if not isGenericType(root[i]):
+                result = searchGenericTypeNode(root[i])
+                if isGenericType(result):
+                    break
+            else:
+                result = root[i]
+                break
+    proc replaceGenericType(root: NimNode) =
+        for i in 0..<root.len:
+            if not isGenericType(root[i]):
+                replaceGenericType(root[i])
+            else:
+                for dgt in defaultGenericType:
+                    if root[i].strVal == dgt[0]:
+                        root[i] = newIdentNode(dgt[1])
+    proc process(root: NimNode): NimNode =
+        result = root
+        let formalParams = root[3]
+        for i in 1 ..< formalParams.len:
+            let paramType = formalParams[i][^2]
+            if paramType.kind == nnkBracketExpr and paramType[0].eqIdent("TypeOrSeqType"):
+                var stmtList = nnkStmtList.newTree()
+                let defaultNode = formalParams[i][^1]
+                #genericTypeあり
+                if searchGenericTypeNode(paramType).kind != nnkEmpty:
+                    let (typ, seqTyp, defaultTyp) = (copy(root), copy(root), copy(root))
+                    # set type of argument(normal type)
+                    typ[3][i][^1] = newEmptyNode() #no default value
+                    typ[3][i][^2] = copy(paramType[1])
+                    #process
+                    let typList = process(typ)
+                    if typList.kind == nnkStmtList:
+                        for typElem in typList:
+                            stmtList.add(typElem)
+                            echo $i & "********"
+                            echo treeRepr(typElem)
+                    else:
+                        stmtList.add(typList)
+                    # set type of argument(seq type)
+                    seqTyp[3][i][^1] = newEmptyNode() #no default value
+                    seqTyp[3][i][^2] = newTree(nnkBracketExpr, ident"seq", paramType[1])
+                    #process
+                    let seqTypList = process(seqTyp)
+                    if seqTypList.kind == nnkStmtList:
+                        for seqTypElem in seqTypList:
+                            stmtList.add(seqTypElem)
+                            echo $i & "********"
+                            echo treeRepr(seqTypElem)
+                    else:
+                        stmtList.add(seqTypList)
+                    # set type of argument(default type)
+                    #defaultあり
+                    if defaultNode.kind != nnkEmpty:
+                        # replace generic type
+                        var staticTree = copy(paramType[1])
+                        replaceGenericType(staticTree)
+                        defaultTyp[3][i][^2] = staticTree
+                        # set generic parameter to empty(default type)
+                        if searchGenericTypeNode(defaultTyp[3]).kind == nnkEmpty:
+                            for i, gp in defaultTyp[2][0].pairs():
+                                if isGenericType(gp):
+                                    defaultTyp[2][0].del(i, 1)
+                                    break
+                        #process
+                        let defaultTypList = process(defaultTyp)
+                        if defaultTypList.kind == nnkStmtList:
+                            for defaultTypElem in defaultTypList:
+                                stmtList.add(defaultTypElem)
+                                echo $i & "********"
+                                echo treeRepr(defaultTypElem)
+                        else:
+                            stmtList.add(defaultTypList)
+                #genericTypeなし
+                else:
+                    let (typ, seqTyp) = (copy(root), copy(root))
+                    # set type of argument(normal type)
+                    typ[3][i][^2] = copy(paramType[1])
+                    #process
+                    let typList = process(typ)
+                    if typList.kind == nnkStmtList:
+                        for typElem in typList:
+                            stmtList.add(typElem)
+                            echo $i & "********"
+                            echo treeRepr(typElem)
+                    else:
+                        stmtList.add(typList)
+                    # set type of argument(seq type)
+                    seqTyp[3][i][^1] = newEmptyNode() #no default value
+                    seqTyp[3][i][^2] = newTree(nnkBracketExpr, ident"seq", paramType[1])
+                    #process
+                    let seqTypList = process(seqTyp)
+                    if seqTypList.kind == nnkStmtList:
+                        for seqTypElem in seqTypList:
+                            stmtList.add(seqTypElem)
+                            echo $i & "********"
+                            echo treeRepr(seqTypElem)
+                    else:
+                        stmtList.add(seqTypList)
+                return stmtList
+    echo treeRepr(pr)
+    result = process(pr)
+    echo "--------"
+    echo treeRepr(result)
 #[
-proc f(x: float): float =
-    sin(2*PI*x/N)
-var s = newSeq[float](N)
-tStart = cpuTime()
-for i in 0..<N:
-    s[i] = f(float(i))
-echo cpuTime() - tStart
-
-var s2: seq[float] = @[]
-tStart = cpuTime()
-for i in 0..<N:
-    s2.add(f(float(i)))
-echo cpuTime() - tStart
-
-tStart = cpuTime()
-parallel:
-    for i in 0..<N:
-        s[i] = spawn f(float(i))
-echo cpuTime() - tStart
-
-proc term(k: float): float = 4 * math.pow(-1, k) / (2*k + 1)
-
-proc pi(n: int): float =
-  var ch = newSeq[float](n+1)
-  parallel:
-    for k in 0..ch.high:
-      ch[k] = spawn term(float(k))
-  for k in 0..ch.high:
-    result += ch[k]
-proc pi2(n: int): float =
-    var ch = newSeq[float](n+1)
-    for k in 0..ch.high:
-        ch[k] = term(float(k))
-    for k in 0..ch.high:
-        result += ch[k]
-
-tStart = cpuTime()
-echo formatFloat(pi(5000))
-echo cpuTime() - tStart
-tStart = cpuTime()
-echo formatFloat(pi2(5000))
-echo cpuTime() - tStart
+macro setDefaultGenericType(pr) =
+    const defaultGenericTypes = {
+        #genericSymbol: defaultGenericType
+        "T":"int",
+        "U":"float",
+    }
+    proc getDefaultGenericType(argName: string): string =
+        for dt in defaultGenericTypes:
+            if dt[0] == argName:
+                return dt[1]
+        return ""
+    proc searchProcDef(root: NimNode): NimNode =
+        result = newEmptyNode()
+        for i in 0..<root.len:
+            if kind(root[i]) != nnkProcDef:
+                result = searchProcDef(root[i])
+            else:
+                result = root[i]
+                break
+    proc process(n: NimNode): NimNode =
+        result = n
+        var procDef = searchProcDef(copy(n))
+        if kind(procDef) == nnkEmpty:
+            return result
+        for i in 1 ..< procDef[3].len:
+            let paramType = procDef[3][i][^2]
+            if paramType.kind == nnkBracketExpr and paramType[0].eqIdent("TypeOrSeqType"):
+                let argName = $procDef[3][i][0]
+                let genericParam = $paramType[1][0][0]
+                let defaultTyp = copy(procDef)
+                if getDefaultGenericType(argName) != "":
+                    # set generic parameter to empty(default type)
+                    for i, gp in defaultTyp[2][0].pairs():
+                        if $gp == genericParam:
+                            defaultTyp[2][0].del(i, 1)
+                            break
+                    # set type of argument(default type)
+                    defaultTyp[3][i][^2] = copy(paramType[1])
+                    defaultTyp[3][i][^2][0][0] = newIdentNode(getDefaultGenericType(argName))
+                    let defaultTypList = process(defaultTyp)
+                    if kind(defaultTypList) == nnkStmtList:
+                        for defaultTypElem in defaultTypList:
+                            stmtList.add(defaultTypElem)
+                    else:
+                        stmtList.add(defaultTypList)
+                #return newStmtList(process(typ), process(seqTyp), process(defaultTyp))
+                return stmtList
+    echo treeRepr(pr)
+    result = process(pr)
+    echo "--------"
+    echo treeRepr(result)
 ]#
 
-tStart = cpuTime()
-for i in 0..<N:
-    discard sum([1,2,3,4,5])
-echo cpuTime() - tStart
+type TypeOrSeqType[X] {.used.} = X or seq[X]
 
-var a2:seq[int] = @[]
-tStart = cpuTime()
-for i in 0..<N:
-    a2.add(sum([1,2,3,4,5]))
-echo cpuTime() - tStart
+proc f1[T](
+    x1: TypeOrSeqType[proc(s:string):T] = parseInt,
+    x2: TypeOrSeqType[T] = 1,
+) {.expandTypeOrSeqType.} =
+    discard
 
-var a3:seq[int] = newSeq[int](N)
-tStart = cpuTime()
-for i in 0..<N:
-    a3[i] = sum([1,2,3,4,5])
-echo cpuTime() - tStart
-
-var a4:seq[string] = @[]
-tStart = cpuTime()
-for i in 0..<N:
-    a4.add($sum([1,2,3,4,5]))
-echo cpuTime() - tStart
-
-var a5:seq[string] = newSeq[string](N)
-tStart = cpuTime()
-for i in 0..<N:
-    a5[i] = $sum([1,2,3,4,5])
-echo cpuTime() - tStart
-
-type ColName = string
-type ColType = enum
-    IntCol, FloatCol, StringCol, DatetimeCol
-type StringDataFrame[T] = object
-    data: T
-    columns: seq[ColName]
-    colIndex: Table[ColName, int]
-    colType: Table[ColName, ColType]
-
-macro getDataFrameData(colTypes: static[openArray[ColType]]): untyped =
-    var returnType = nnkPar.newTree()
-    for colType in colTypes:
-        let t = case colType
-            of IntCol: bindSym"int"
-            of FloatCol: bindSym"float"
-            of StringCol: bindSym"string"
-            of DatetimeCol: bindSym"DateTime"
-        returnType.add(
-            nnkBracketExpr.newTree(newIdentNode("seq"), t)
-        )
-    return returnType
-
-proc initData[T](columnsWithType: openArray[(ColName, ColType)]): T =
-    var res: getDataFrameData(columnsWithType)
-    result = res
-
-proc initStringDataFrame[T](columnsWithType: openArray[(ColName, ColType)]): StringDataFrame[T] =
-    result = StringDataFrame[getDataFrameData(columnsWithType)]
-    result.columns = @[]
-    result.colIndex = initTable[ColName, int]()
-    result.colType = initTable[ColName, ColType]()
-    for i, (colName, colType) in columnsWithType.pairs():
-        result.columns.add(colName)
-        result.colIndex[colName] = i
-        result.colType[colName] = colType
-
-var columns = @["col1", "col2", "col3"]
-var types: seq[ColType] = @[IntCol, FloatCol, StringCol]
-var ct =
-    collect(newSeq):
-        for (c, t) in zip(columns, types):
-            (c, t)
-#var df = initStringDataFrame(ct)
-
-var df: getDataFrameData(@[IntCol, FloatCol, StringCol])
-echo typeof(df)
-echo df
-
-macro inspectType(df: typed): untyped =
-    echo "--------"
-    echo df.strVal
-    echo df.getTypeImpl.repr
-    for colType in df.getTypeImpl:
-        echo colType.repr
-        for cellType in colType.getTypeImpl:
-            echo cellType.repr
-
-inspectType(df)
-
-var b1 = @[1,2,3]
-var b2 = @[1,2,3]
-echo b1 == b2
-
-var xxx: string
-echo xxx == ""
-
-tStart = cpuTime()
-var c1: seq[int] = @[]
-for i in 0..<100000:
-    c1.add(i)
-echo cpuTime() - tStart
-tStart = cpuTime()
-var c2 =
-    collect(newSeq):
-    for i in 0..<100000:
-        i
-echo cpuTime() - tStart
-
-echo toHashSet([1,2,3])-toHashSet([1,2,3,4])
-
-echo `<`(1,2)
-
-macro compareSeriesAndT(x: Series, y:typed, operator:untyped): untyped =
-    template body(compExpression: untyped):untyped{.dirty.} =
-        echo x, y
-        when typeof(y) is int:
-            result =
-                collect(newSeq):
-                    for z in x.toInt():
-                        compExpression
-        when typeof(y) is float:
-            result =
-                collect(newSeq):
-                    for z in x.toFloat():
-                        compExpression
-        else:
-            result =
-                collect(newSeq):
-                    for z in x:
-                        compExpression
-    var compExpression = newCall(
-        nnkAccQuoted.newTree(
-            operator
-        ),
-        newIdentNode("z"),
-        newIdentNode("y"),
-    )
-    result = getAst(body(compExpression))
-
-proc whenFunc[T](a: T) =
-    when typeof(T) is int:
-        echo fmt"a is int"
-    else:
-        when typeof(T) is float:
-            echo fmt"a is float"
-        else:
-            echo fmt"a is something"
-
-whenFunc(1)
-whenFunc(1.0)
-whenfunc("1")
+f1(parseInt, "1")
+#f1()
 
 
 
-proc `~===`*[T](a: Series, b: T): seq[bool] =
-    let x = a
-    let y = b
-    compareSeriesAndT(x, y, `==`)
-
-proc `~===`*[T](a: T, b: Series): FilterSeries =
-    let x = b
-    let y = a
-    compareSeriesAndT(x, y, `==`)
-
-echo (@["1","2","3"] > 1) | (3 > @["1","2","3"])
-echo 2 > @["1","2","3"]
-echo @["1","2","3"] < 2
-echo @["1","2","3"] === "1"
-echo "1" === @["1","2","3"]
-
-echo "1" + 1
-
-proc f1(b: openArray[bool]) =
-    echo b
-
-f1(@[true])
-f1([true])
-
-proc f2(b: bool or openArray[bool]) =
-    echo b
-
-f2(true)
-#f2(@[true])
-#f2([true])
+echo "EOF"

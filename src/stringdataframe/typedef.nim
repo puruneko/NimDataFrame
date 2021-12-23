@@ -29,3 +29,4 @@ type StringDataFrameRollilng* = object
     format*: string
 
 type StringDataFrameSafeTypes* = int|float|DateTime|string
+type TypeOrSeqType*[A] = A|seq[A]

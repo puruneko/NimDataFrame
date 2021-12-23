@@ -101,10 +101,10 @@ proc setIndex*(df: StringDataFrame, indexCol: ColName, delete=false): StringData
 
 
 ###############################################################
-proc map*[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
+proc map*[T, U](s: Series, fn: U -> T, translator: Cell -> U): Series =
     ## Seriesの各セルに対して関数fnを適用する.
     ## 関数fnにはSeriesの各セルが渡され、関数fnは文字列に変換可能な任意の型を返す.
-    ## 文字列型以外の操作を関数fn内で行う場合、fromCell関数にCell型から任意の型に変換する関数を渡す.
+    ## 文字列型以外の操作を関数fn内で行う場合、translator関数にCell型から任意の型に変換する関数を渡す.
     runnableExamples:
         let triple = proc(c: int): int = c * 3
         df["col1"].map(triple, parseInt)
@@ -112,7 +112,7 @@ proc map*[T, U](s: Series, fn: U -> T, fromCell: Cell -> U): Series =
 
     result = initSeries()
     for c in s:
-        result.add(fn(fromCell(c)))
+        result.add(fn(translator(c)))
 
 proc stringMap*(s: Series, fn: string -> string): Series =
     let f = proc(c: Cell): string = c
@@ -154,24 +154,23 @@ proc filter*(df: StringDataFrame, fltr: Row -> bool): StringDataFrame =
 
 
 ###############################################################
-proc cmpAsc[T](x: T, y: T): int =
-    if x < y: -1
-    elif x == y: 0
-    else: 1
-proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell: Cell -> T, ascending=true, ascFn: (T, T) -> int): StringDataFrame =
-    ## DataFrameを指定列でソートする.
-    ## 文字列以外のソートの場合はfromCellに文字列から指定型に変換する関数を指定する.
-    ##
-    result = initStringDataFrame(df)
+proc defaultTranslator*(x: Cell): string = x
+
+proc sortImpl*[T](
+    df: StringDataFrame,
+    colName: ColName,
+    ascending: bool,
+    translator: proc(c:Cell):T,
+    ascFn: proc(x,y:T):int
+): StringDataFrame =
     let cn =
         if colName != reservedColName:
             colName
         else:
             df.indexCol
-    var sortSource =
-        collect(newSeq):
-            for rowNumber, cell in df[cn].pairs():
-                (rowNumber, fromCell(cell))
+    var sortSource: seq[(int,T)] = @[]
+    for rowNumber, cell in df[cn].pairs():
+        sortSource.add((rowNumber, translator(cell)))
     if ascending:
         let ascFn2 = proc(x: (int,T), y: (int,T)): int = ascFn(x[1], y[1])
         sortSource.sort(ascFn2)
@@ -179,68 +178,98 @@ proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell:
         let desFn2 = proc(x: (int,T), y: (int,T)): int = ascFn(x[1], y[1]) * -1
         sortSource.sort(desFn2)
     #
+    result = initStringDataFrame(df)
     for sorted in sortSource:
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][sorted[0]])
 
-proc sort*[T](df: StringDataFrame, colName: ColName = reservedColName, fromCell: Cell -> T, ascending=true): StringDataFrame =
-    result = sort(df, colName, fromCell, ascending, cmpAsc)
+template typeOrSeqType(U: type): type = U or seq[U]
 
-#TODO: x: openArray[T] or Tの適用
-proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCells: openArray[Cell -> T], ascendings=openArray[bool], ascFns: openArray[(T, T) -> int]): StringDataFrame =
-    if colNames.len != fromCells.len or colNames.len != ascendings.len or colNames.len != ascFns.len:
-        raise newException(
-                StringDataFrameError,
-                "colNames and fromCells and asceindings and ascFns must have the same length"
+template sort*[T](
+    df: StringDataFrame,
+    colNames: ColName or seq[ColName] = reservedColName,
+    ascendings: bool or seq[bool] = true,
+    translators: proc(c:Cell):T or seq[proc(c:Cell):T] = defaultTranslator,
+    ascFns: proc(x,y:T):int or seq[proc(x,y:T):int] = cmp,
+): StringDataFrame =
+    let length =
+        max(@[
+            when typeof(colNames) is seq: colNames.len else: 1,
+            when typeof(ascendings) is seq: ascendings.len else: 1,
+            when typeof(translators) is seq: translators.len else: 1,
+            when typeof(ascFns) is seq: ascFns.len else: 1,
+        ])
+    when typeof(colNames) is seq:
+        var newColNames = colNames
+    else:
+        var newColNames: seq[ColName] = @[]
+        for i in 0..<length:
+            newColNames.add(colNames)
+    when typeof(ascendings) is seq:
+        var newAscendings = ascendings
+    else:
+        var newAscendings: seq[bool] = @[]
+        for i in 0..<length:
+            newAscendings.add(ascendings)
+    when typeof(translators) is seq:
+        var newTranslators = translators
+    else:
+        var newTranslators: seq[proc(c:Cell):T] = @[]
+        for i in 0..<length:
+            newTranslators.add(translators)
+    when typeof(ascFns) is seq:
+        var newAscFns = ascFns
+    else:
+        var newAscFns: seq[proc(x,y:T):int] = @[]
+        for i in 0..<length:
+            newAscFns.add(ascFns)
+    if newColNames.len != length or
+      newAscendings.len != length or
+      newTranslators.len != length or
+      newAscFns.len != length:
+        raise newException(StringDataFrameError, "all arguments must be the same length(colNames:" & $(newColNames.len) & "translators:" & $(newTranslators.len) & ", ascendings:" & $(newAscendings.len) & ", ascFns:" & $(newAscFns.len))
+    #
+    var result = df
+    for i in countdown(length-1, 0):
+        result = result.sortImpl(
+            newColNames[i],
+            newAscendings[i],
+            newTranslators[i],
+            newAscFns[i],
         )
-    result = initStringDataFrame(df, copy=true)
-    for i in reversed(0..<colNames.len):
-        result = result.sort(colNames[i], fromCells[i], ascendings[i], ascFns[i])
+    result
 
-proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true, ascFn: (T, T) -> int): StringDataFrame =
-    let fromCells =
-        collect(newSeq):
-            for _ in colNames:
-                fromCell
-    let ascFns =
-        collect(newSeq):
-            for _ in colNames:
-                ascFn
-    result = df.sort(colNames, fromCells, ascending, ascFns)
+proc intSort*(
+    df: StringDataFrame,
+    colNames: ColName or seq[ColName] = reservedColName,
+    ascendings: bool or seq[bool] = true,
+): StringDataFrame =
+    result = df.sort(colNames, parseInt, ascendings)
 
-proc sort*[T](df: StringDataFrame, colNames: openArray[ColName], fromCell: Cell -> T, ascending=true): StringDataFrame =
-    result = df.sort(colNames, fromCell, ascending, cmpAsc)
+proc floatSort*(
+    df: StringDataFrame,
+    colNames: ColName or seq[ColName] = reservedColName,
+    ascendings: bool or seq[bool] = true,
+): StringDataFrame =
+    result = df.sort(colNames, parseFloat, ascendings)
 
-proc sort*(df: StringDataFrame, colName: ColName = reservedColName, ascending=true): StringDataFrame =
-    let f = proc(c: Cell): Cell = c
-    sort(df, colName, f, ascending)
-
-proc sort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
-    result = initStringDataFrame(df, copy=true)
-    for colName in reversed(colNames):
-        result = result.sort(colName, ascending)
-
-proc intSort*(df: StringDataFrame, colName: ColName = reservedColName, ascending=true): StringDataFrame =
-    sort(df, colName, parseInt, ascending)
-proc intSort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
-    result = df
-    for colName in reversed(colNames):
-        result = result.intSort(colName, ascending)
-
-proc floatSort*(df: StringDataFrame, colName: ColName = reservedColName, ascending=true): StringDataFrame =
-    sort(df, colName, parseFloat, ascending)
-proc floatSort*(df: StringDataFrame, colNames: openArray[ColName], ascending=true): StringDataFrame =
-    result = df
-    for colName in reversed(colNames):
-        result = result.floatSort(colName, ascending)
-
-proc datetimeSort*(df: StringDataFrame, colName: ColName = reservedColName, format=defaultDatetimeFormat, ascending=true): StringDataFrame =
-    sort(df, colName, genParseDatetime(format), ascending)
-proc datetimeSort*(df: StringDataFrame, colNames: openArray[ColName], format=defaultDatetimeFormat, ascending=true): StringDataFrame =
-    result = df
-    for colName in reversed(colNames):
-        result = result.datetimeSort(colName, format, ascending)
-
+#[
+proc datetimeSort*(
+    df: StringDataFrame,
+    colNames: ColName|seq[ColName] = reservedColName,
+    ascendings: bool|seq[bool] = true,
+    formats: string|seq[string] = defaultDatetimeFormat,
+): StringDataFrame =
+    when typeof(formats) is seq:
+        var translators =
+            collect(newSeq):
+                for f in newFormats:
+                    genParseDatetime(f)
+    else:
+        var translators = genParseDatetime(formats)
+    result = sort(df, colNames, translators, ascendings)
+]#
+proc datetimeSort*(df: StringDataFrame): StringDataFrame = df
 
 ###############################################################
 proc duplicated*(df: StringDataFrame, colNames: openArray[ColName] = []): FilterSeries =
