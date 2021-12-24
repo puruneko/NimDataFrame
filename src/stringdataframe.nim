@@ -282,6 +282,7 @@ proc toDataFrame*[T](
     columns: openArray[(ColName, seq[T])],
     indexCol="",
     datetimeFormat="",
+    fillEmpty=false,
 ): StringDataFrame =
     ##
     runnableExamples:
@@ -296,20 +297,21 @@ proc toDataFrame*[T](
 
     result = initStringDataFrame()
     var c: seq[ColName] = @[]
-    var l: seq[int] = @[]
+    let maxLength = max(columns.map(x => x[1].len))
+    #let maxLength = max(columns.map(proc(x:(ColName, seq[T])): int = x[1].len))
     #代入
     for (colName, s) in columns:
+        if not fillEmpty and s.len != maxLength:
+            raise newException(StringDataFrameError, "all series must be same length")
         if colName == reservedColName:
-            raise newException(StringDataFrameReservedColNameError,fmt"{reservedColName} is library-reserved name"
-                )
+            raise newException(StringDataFrameReservedColNameError,fmt"{reservedColName} is library-reserved name")
         result.addColumn(colName)
         for c in s:
             result[colName].add(c)
+        if s.len < maxLength:
+            for i in 0..<maxLength-s.len:
+                result[colName].add(dfEmpty)
         c.add(colName)
-        l.add(s.len)
-    #長さチェック
-    if toHashSet(l).len != 1:
-        raise newException(StringDataFrameError, "series must all be same length")
     #インデックスの設定
     if c.contains(indexCol):
         result.indexCol = indexCol
@@ -317,7 +319,7 @@ proc toDataFrame*[T](
         if indexCol == "":
             result[defaultIndexName] =
                 collect(newSeq):
-                    for i in 0..<l[0]: $i
+                    for i in 0..<maxLength: $i
             result.indexCol = defaultIndexName
         else:
             raise newException(StringDataFrameError, fmt"not found {indexCol}")
@@ -332,6 +334,7 @@ proc toDataFrame*(
     indexCol="",
     datetimeFormat="",
 ): StringDataFrame =
+    ## 0行の空のデータフレームを作成
     var newColumns: seq[(ColName, seq[string])] =
         collect(newSeq):
             for colName in columns:

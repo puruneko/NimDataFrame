@@ -50,6 +50,7 @@ proc initFilterSeries*(): FilterSeries =
 
 
 proc `~`*(a: StringDataFrame, b: StringDataFrame): bool =
+    ## almost equal
     if a.indexCol != b.indexCol:
         return false
     if toHashSet(a.columns) != toHashSet(b.columns):
@@ -60,6 +61,7 @@ proc `~`*(a: StringDataFrame, b: StringDataFrame): bool =
     return true
 
 proc `==`*(a: StringDataFrame, b: StringDataFrame): bool =
+    ## equal
     result = (
         a.data == b.data and
         a.columns == b.columns and
@@ -67,9 +69,11 @@ proc `==`*(a: StringDataFrame, b: StringDataFrame): bool =
     )
 
 proc `!=`*(a: StringDataFrame, b: StringDataFrame): bool =
+    ## not equal
     result = not (a == b)
 
 proc `===`*(a: StringDataFrame, b: StringDataFrame): bool =
+    ## perfectly equal
     result = (
         a == b and
         a.colTable == b.colTable and
@@ -77,6 +81,7 @@ proc `===`*(a: StringDataFrame, b: StringDataFrame): bool =
     )
 
 proc `!==`*(a: StringDataFrame, b: StringDataFrame): bool =
+    ## perfectly not equal
     result = not (a === b)
 
 proc addColumn*(df: var StringDataFrame, colName: ColName) =
