@@ -7,10 +7,11 @@ import strformat
 import times
 import re
 import complex
+import algorithm
 
 import StringDataFrame
 
-proc translatorToComplex(c: Cell): Complex[float] =
+proc translatorToComplex*(c: Cell): Complex[float] =
     var matches: array[2, string]
     let matchOk = match(c, re"\((\d+(?:\.\d)?),(\d+(?:\.\d)?)\)", matches)
     if matchOk:
@@ -463,24 +464,16 @@ suite "sort":
             },
             indexCol="col1"
         )
-        proc translatorToComplex(c: Cell): Complex[float] {.closure.} =
-            var matches: array[2, string]
-            let matchOk = match(c, re"\((\d+(?:\.\d)?),(\d+(?:\.\d)?)\)", matches)
-            if matchOk:
-                result = complex(
-                    parseFloat(matches[0]),
-                    parseFloat(matches[1]),
-                )
-            else:
-                result = complex(0.0,0.0)
-        let asc = proc(a: Complex[float], b: Complex[float]): int {.closure.} =
+        let ascCmpx = proc(a: Complex[float], b: Complex[float]): int {.closure.} =
             if a.abs < b.abs: -1
             elif a.abs == b.abs: 0
             else: 1
+        let ascInt = proc(x: int, y: int): int =
+            if x < y: -1
+            elif x == y: 0
+            else: 1
         
     test "(happyPath)基本機能":
-        discard
-        #[
         #do
         let newDf = df.sort()
         #check
@@ -491,11 +484,10 @@ suite "sort":
             },
             indexCol="col1"
         )
-        ]#
     
     test "(happyPath)引数全指定":
         #do
-        let newDf = df.sort("col2", true, translatorToComplex, asc)
+        let newDf = df.sort("col2", true, translatorToComplex, ascCmpx)
         #check
         check newDf == toDataFrame(
             {
@@ -507,70 +499,162 @@ suite "sort":
     
     test "(happyPath)引数全指定(dec)":
         #do
-        let newDf = df.sort("col2", false, translatorToComplex, asc)
+        let newDf = df.sort(colName="col2", ascending=false, translator=translatorToComplex, ascFn=ascCmpx)
         #check
         check newDf == toDataFrame(
             {
-                "col1": @["1","3","2"],
-                "col2": @["(4.0,3.0)","(2.0,3.0)","(1.0,1.0)"],
+                "col1": @["4","1","6","3","5","2"],
+                "col2": @["(4.0,3.0)","(4.0,3.0)","(2.0,3.0)","(2.0,3.0)","(1.0,1.0)","(1.0,1.0)"],
             },
             indexCol="col1"
         )
     
     test "(happyPath)colName省略":
-        #setup
-        let ascInt = proc(x: int, y: int): int =
-            if x < y: -1
-            elif x == y: 0
-            else: 1
         #do
-        let newDf = df.sort(ascendings=false, translators=parseInt, ascFns = ascInt)
+        let newDf = df.sort(ascending=false, translator=parseInt, ascFn=ascInt)
         #check
         check newDf == toDataFrame(
             {
-                "col1": @["1","2","3"],
-                "col2": @["(4.0,3.0)","(1.0,1.0)","(2.0,3.0)"],
+                "col1": @["6","5","4","3","2","1"],
+                "col2": @["(2.0,3.0)","(1.0,1.0)","(4.0,3.0)","(2.0,3.0)","(1.0,1.0)","(4.0,3.0)"],
+            },
+            indexCol="col1"
+        )
+
+    test "(happyPath)ascending省略":
+        #do
+        let newDf = df.sort(colName="col1", translator=parseInt, ascFn=cmp)
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["1","2","3","4","5","6"],
+                "col2": @["(4.0,3.0)","(1.0,1.0)","(2.0,3.0)","(4.0,3.0)","(1.0,1.0)","(2.0,3.0)"],
             },
             indexCol="col1"
         )
     
     test "(happyPath)translator省略":
         #do
-        let newDf = df.sort(colNames="col1", ascendings=false, ascFns = cmp)
+        let newDf = df.sort(colName="col1", ascending=false, ascFn=cmp[string])
         #check
         check newDf == toDataFrame(
             {
-                "col1": @["1","2","3"],
-                "col2": @["(4.0,3.0)","(1.0,1.0)","(2.0,3.0)"],
+                "col1": @["6","5","4","3","2","1"],
+                "col2": @["(2.0,3.0)","(1.0,1.0)","(4.0,3.0)","(2.0,3.0)","(1.0,1.0)","(4.0,3.0)"],
             },
             indexCol="col1"
         )
 
-    test "(happyPath)ascending省略":
-        discard
     test "(happyPath)ascFn省略":
-        discard
-    test "(happyPath)複数指定:引数全指定":
-        discard
-    test "(happyPath)複数指定:引数全指定(dec)":
-        discard
-    test "(happyPath)複数指定:colName省略":
-        discard
-    test "(happyPath)複数指定:translator省略":
-        discard
-    test "(happyPath)複数指定:ascending省略":
-        discard
-    test "(happyPath)複数指定:ascFn省略":
-        discard
-    test "(exceptionPath)引数の長さが異なる":
-        discard
+        #do
+        let newDf = df.sort(colName="col1", ascending=false, translator=parseInt)
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["6","5","4","3","2","1"],
+                "col2": @["(2.0,3.0)","(1.0,1.0)","(4.0,3.0)","(2.0,3.0)","(1.0,1.0)","(4.0,3.0)"],
+            },
+            indexCol="col1"
+        )
+    
+    test "(happyPath)sortチェーン":
+        #do
+        let newDf = df
+                    .sort(translator=parseInt, ascFn=cmp[int])
+                    .sort(colName="col2", translator=translatorToComplex, ascFn=ascCmpx)
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["2","5","3","6","1","4"],
+                "col2": @["(1.0,1.0)","(1.0,1.0)","(2.0,3.0)","(2.0,3.0)","(4.0,3.0)","(4.0,3.0)"],
+            },
+            indexCol="col1"
+        )
 
 suite "intSort":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        let df = toDataFrame(
+            {
+                "col1": @["1","2","3","4"],
+                "col2": @["a","b","c","d"],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.intSort("col1", false)
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["4","3","2","1"],
+                "col2": @["d","c","b","a"],
+            },
+            indexCol="col1"
+        )
+
 suite "floatSort":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        let df = toDataFrame(
+            {
+                "col1": @["1","2","3","4"],
+                "col2": @["a","b","c","d"],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.floatSort("col1", false)
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["4","3","2","1"],
+                "col2": @["d","c","b","a"],
+            },
+            indexCol="col1"
+        )
+
 suite "datetimeSort":
-    discard
+    
+    test "(happyPath)基本機能":
+        #setup
+        let df = toDataFrame(
+            {
+                "col1": @["2021-12-24 11:42:15","2020-12-24 11:42:15","2022-12-24 11:42:15"],
+                "col2": @["1","2","3"],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.datetimeSort()
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["2020-12-24 11:42:15","2021-12-24 11:42:15","2022-12-24 11:42:15"],
+                "col2": @["2","1","3"],
+            },
+            indexCol="col1",)
+
+    test "(happyPath)フォーマット変更":
+        #setup
+        let df = toDataFrame(
+            {
+                "col1": @["2021/12/24 11:42:15","2020/12/24 11:42:15","2022/12/24 11:42:15"],
+                "col2": @["1","2","3"],
+            },
+            indexCol="col1",
+        )
+        #do
+        let newDf = df.datetimeSort(format="yyyy/MM/dd HH:mm:ss")
+        #check
+        check newDf == toDataFrame(
+            {
+                "col1": @["2020/12/24 11:42:15","2021/12/24 11:42:15","2022/12/24 11:42:15"],
+                "col2": @["2","1","3"],
+            },
+            indexCol="col1",)
+
 suite "duplicated":
     
     test "(happyPath)基本機能":

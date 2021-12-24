@@ -155,14 +155,16 @@ proc filter*(df: StringDataFrame, fltr: Row -> bool): StringDataFrame =
 
 ###############################################################
 proc defaultTranslator*(x: Cell): string = x
+proc defaultAscFn*[T](x, y: T): int = cmp(x, y)
 
-proc sortImpl*[T](
+proc sort*[T](
     df: StringDataFrame,
-    colName: ColName,
-    ascending: bool,
+    colName: ColName = reservedColName,
+    ascending: bool = true,
     translator: proc(c:Cell):T,
-    ascFn: proc(x,y:T):int
+    ascFn: proc(x,y:T):int,
 ): StringDataFrame =
+    ## must set translator and ascFn
     let cn =
         if colName != reservedColName:
             colName
@@ -183,93 +185,57 @@ proc sortImpl*[T](
         for colIndex, colName in df.columns.pairs():
             result[colIndex].add(df[colIndex][sorted[0]])
 
-template typeOrSeqType(U: type): type = U or seq[U]
-
 template sort*[T](
     df: StringDataFrame,
-    colNames: ColName or seq[ColName] = reservedColName,
-    ascendings: bool or seq[bool] = true,
-    translators: proc(c:Cell):T or seq[proc(c:Cell):T] = defaultTranslator,
-    ascFns: proc(x,y:T):int or seq[proc(x,y:T):int] = cmp,
+    colName: ColName = reservedColName,
+    ascending: bool = true,
+    translator: proc(c:Cell):T,
 ): StringDataFrame =
-    let length =
-        max(@[
-            when typeof(colNames) is seq: colNames.len else: 1,
-            when typeof(ascendings) is seq: ascendings.len else: 1,
-            when typeof(translators) is seq: translators.len else: 1,
-            when typeof(ascFns) is seq: ascFns.len else: 1,
-        ])
-    when typeof(colNames) is seq:
-        var newColNames = colNames
-    else:
-        var newColNames: seq[ColName] = @[]
-        for i in 0..<length:
-            newColNames.add(colNames)
-    when typeof(ascendings) is seq:
-        var newAscendings = ascendings
-    else:
-        var newAscendings: seq[bool] = @[]
-        for i in 0..<length:
-            newAscendings.add(ascendings)
-    when typeof(translators) is seq:
-        var newTranslators = translators
-    else:
-        var newTranslators: seq[proc(c:Cell):T] = @[]
-        for i in 0..<length:
-            newTranslators.add(translators)
-    when typeof(ascFns) is seq:
-        var newAscFns = ascFns
-    else:
-        var newAscFns: seq[proc(x,y:T):int] = @[]
-        for i in 0..<length:
-            newAscFns.add(ascFns)
-    if newColNames.len != length or
-      newAscendings.len != length or
-      newTranslators.len != length or
-      newAscFns.len != length:
-        raise newException(StringDataFrameError, "all arguments must be the same length(colNames:" & $(newColNames.len) & "translators:" & $(newTranslators.len) & ", ascendings:" & $(newAscendings.len) & ", ascFns:" & $(newAscFns.len))
-    #
-    var result = df
-    for i in countdown(length-1, 0):
-        result = result.sortImpl(
-            newColNames[i],
-            newAscendings[i],
-            newTranslators[i],
-            newAscFns[i],
-        )
-    result
+    ## must set translator
+    ## use default ascFn
+    df.sort(colName, ascending, translator, defaultAscFn)
+
+template sort*(
+    df: StringDataFrame,
+    colName: ColName = reservedColName,
+    ascending: bool = true,
+    ascFn: proc(x,y:string):int,
+): StringDataFrame =
+    ## must set ascFn
+    ## use default translator
+    ## (so, ascFn should be implemented as string-comparing procudure)
+    df.sort(colName, ascending, defaultTranslator, ascFn)
+
+proc sort*(
+    df: StringDataFrame,
+    colName: ColName = reservedColName,
+    ascending: bool = true,
+): StringDataFrame =
+    ## use default translator and ascFn
+    ## (so, column is sorted as type of string)
+    df.sort(colName, ascending, defaultTranslator, defaultAscFn)
 
 proc intSort*(
     df: StringDataFrame,
-    colNames: ColName or seq[ColName] = reservedColName,
-    ascendings: bool or seq[bool] = true,
+    colNames: ColName = reservedColName,
+    ascendings: bool = true,
 ): StringDataFrame =
-    result = df.sort(colNames, parseInt, ascendings)
+    df.sort(colNames, ascendings, parseInt, defaultAscFn)
 
 proc floatSort*(
     df: StringDataFrame,
-    colNames: ColName or seq[ColName] = reservedColName,
-    ascendings: bool or seq[bool] = true,
+    colNames: ColName = reservedColName,
+    ascendings: bool = true,
 ): StringDataFrame =
-    result = df.sort(colNames, parseFloat, ascendings)
+    df.sort(colNames, ascendings, parseFloat, defaultAscFn)
 
-#[
 proc datetimeSort*(
     df: StringDataFrame,
-    colNames: ColName|seq[ColName] = reservedColName,
-    ascendings: bool|seq[bool] = true,
-    formats: string|seq[string] = defaultDatetimeFormat,
+    colNames: ColName = reservedColName,
+    format: string = defaultDatetimeFormat,
+    ascendings: bool = true,
 ): StringDataFrame =
-    when typeof(formats) is seq:
-        var translators =
-            collect(newSeq):
-                for f in newFormats:
-                    genParseDatetime(f)
-    else:
-        var translators = genParseDatetime(formats)
-    result = sort(df, colNames, translators, ascendings)
-]#
-proc datetimeSort*(df: StringDataFrame): StringDataFrame = df
+    df.sort(colNames, ascendings, genParseDatetime(format), defaultAscFn)
 
 ###############################################################
 proc duplicated*(df: StringDataFrame, colNames: openArray[ColName] = []): FilterSeries =
